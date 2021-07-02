@@ -1,0 +1,21 @@
+default:
+    py_version: "python3/bin/python"
+    rcvr_recode_file: '/Users/mrosen44/OneDrive - Johns Hopkins University/Data_Analysis/IM_Resident_Study/Receiver_codes/Revised_reciever_category_2.xlsx'
+    db_loc: '/Users/mrosen44/Documents/Data_Analysis_Local/RTLS_FB_Reports/'
+    db_name: 'RTLS_06102021.db'
+    in_path: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/Data_pulls'
+    rule_1_thresh: 300
+    rule_2_thresh: 180
+    rule_2_locs: !expr list('MD Workroom')
+    badge_file: '/Users/mrosen44/Johns Hopkins University/Amanda Bertram - Graduate Medical Training Laboratory/RTLS Badge Status.xlsx'
+    weekly_report_dir: '/Users/mrosen44/OneDrive - Johns Hopkins University/Data_Analysis/IM_Resident_Study/WeeklyReportDocs/'
+    badge_timeline_dir: !expr getwd()
+    weekly_report_range: 7 # days to look back for reports
+
+pilot_study:
+    db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/Data_Analysis/IM_Resident_Study/Data_bases/'
+    db_name: 'IM_Resident_RTLS_PILOT.db'
+
+pilot_study_RTLS_030819_db:
+    db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/'
+    db_name: 'RTLS_030819.db'
