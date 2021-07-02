@@ -3,6 +3,8 @@
 /Notes/
 /Output/
 
+.DS_Store
+
 # Virtual environment
 /python3/
 
