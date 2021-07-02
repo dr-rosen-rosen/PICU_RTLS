@@ -33,7 +33,8 @@ csv_to_db(
 rcvr_dscrp_to_loc_code(
   db_name = config$db_name,
   db_loc = config$db_loc,
-  rcvr_recode_file = config$rcvr_recode_file
+  rcvr_recode_file = config$rcvr_recode_file,
+  rcvr_recode_file_loc = config$rcvr_recode_file_loc
   )
 
 # test variables

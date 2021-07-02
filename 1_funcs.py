@@ -247,7 +247,7 @@ def get_weekly_report(anchor_date,look_back_days,db_name,db_loc,badge_file,weekl
     df = df.groupby(['RTLS_ID']).agg({'Duration': 'sum'})
     df.sort_values('Duration',axis=0,inplace=True,ascending=True)
     fname = 'IM_Badge_data_from_{}_to_{}_runOn{}.csv'.format(lft_win,rght_win,datetime.date(datetime.now()))
-    df.to_csv(fname)#(os.path.join(weekly_report_dir,fname),index=True)
+    df.to_csv(os.path.join(os.getwd(),weekly_report_dir,fname)
     print('Of the {} active badges, {} had data between {} and {}.'.format(len(target_badges),len(df),lft_win,rght_win))
     print('These active badges did not have data: {}'.format(set(target_badges).difference(set(df.index.tolist()))))
 
@@ -317,7 +317,7 @@ def csv_to_db(db_name, db_loc, in_path):
 ####################################################################################################
 ############################## Looks at all recievers in db, and adds location code for those with none
 ####################################################################################################
-def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file):
+def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file,rcvr_recode_file_loc):
     #### This function pulls all RTLS recievers in the database which do not have a location code, and
     #### codes and updates the reciever table.
 
@@ -338,7 +338,7 @@ def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file):
         print('This many receivers being recoded... '+str(len(receivers)))
 
         # read in locations from Travis' file and create dict for recoding
-        IM_locs = pd.read_excel(rcvr_recode_file,header=0)
+        IM_locs = pd.read_excel(os.path.join(os.getcwd(),rcvr_recode_file_loc,rcvr_recode_file),header=0)
         IM_locs = IM_locs[['ReceiverName','IM_loc_map']]
 
         #ReceiverDescription is the old general mapping... this uses the generic mapping to fill in the NAs for the recoded locations
