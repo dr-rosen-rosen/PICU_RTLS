@@ -8,6 +8,8 @@ library(lubridate)
 library(tidyverse)
 library(viridis)
 library(hrbrthemes)
+library(officer)
+library(DBI)
 ###############################################################################################
 #####################   Pulls data for specific badges and time range
 ###############################################################################################
@@ -21,28 +23,32 @@ get_RTLS_data <- function(badges, strt, stp) {
     Badge = character()
   )
   # makes sure badges is a list (and not just one badge var)
-  if (badges == 'all') {
-    tbls <- DBI::dbListTables(con)
-    badges <- grep('Table_',tbls, value = TRUE)
-  } else if (!is.list(badges)) {
-    badges <- as.list(paste0('Table_',badges))
-  } else {
-    badges <- paste0('Table_',badges)
-  }
+  if (length(badges) > 1){ badges <- paste0('Table_',badges)}
+  else if (length(badges) == 1) {
+    if (badges == 'all') {
+      tbls <- DBI::dbListTables(con)
+      badges <- grep('Table_',tbls, value = TRUE)
+    } else {badges <- as.list(paste0('Table_',badges))}
+    }
+    print(strt)
   # loops through each badge and returns data in timerange
   for (badge in badges) {
-    badge_data <- con %>%
+    if (DBI::dbExistsTable(conn = con, name = badge)) {
+      badge_data <- con %>%
       tbl(badge) %>%
       collect() %>%
-      mutate(across(c('Time_In','Time_Out'), lubridate:::ymd_hms))
+      mutate(across(c('Time_In','Time_Out'), lubridate::ymd_hms))
+      print('here 1')
     # Set time filters
-    if (strt != 'all' & stp != 'all') {badge_data <- badge_data %>% filter(Time_In >= lubridate::ymd(strt) & Time_Out <= lubridate::ymd(stp))} 
-    else if (strt != 'all' & stp == 'all') {badge_data <- badge_data %>% filter(Time_In >= strt)} 
-    else if (strt == 'all' & stp != 'all') {badge_data <- badge_data %>% filter(Time_Out <= stp)} 
+      badge_data <- badge_data %>% filter(Time_In >= as.Date(strt) & Time_Out <= as.Date(stp))
+      print('here 2')
+    #else if (strt != 'all' & stp == 'all') {badge_data <- badge_data %>% filter(Time_In >= strt)} 
+    #else if (strt == 'all' & stp != 'all') {badge_data <- badge_data %>% filter(Time_Out <= stp)} 
     
-    badge_data$Badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
-    all_data <- rbind(all_data, badge_data)
-    print(nrow(badge_data))
+      badge_data$Badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
+      all_data <- rbind(all_data, badge_data)
+      print(nrow(badge_data))
+    } else {print(paste('No Table for ',badge,' ...'))}
   }
   all_data
 }
@@ -81,6 +87,7 @@ make_overall_bar <- function(df, badge){
     ) + scale_y_continuous(labels = scales::percent_format(scale = 1))
     #scale_color_hue() +
     #theme_classic()
+  return(summary_fig)
 }
 
 ###############################################################################################
@@ -126,4 +133,33 @@ make_area_plot <- function(df, perc, badge) {
     ) + 
     scale_x_continuous(breaks = seq(0, 23, by = 4))
 
+}
+
+###############################################################################################
+#####################   Functions for creating feedback reports
+###############################################################################################
+
+### Creates one feedback report
+
+create_FB_reports <- function(target_badges, strt, stp, FB_report_dir) {
+  # pull data
+  df <- get_RTLS_data(
+    badges = target_badges,
+    strt = strt,
+    stp = stp
+  )
+  df <- loc_code_badge_data(
+    badge_data = df,
+    db_name = config$db_name,
+    db_loc = config$db_loc
+  )
+  # make reports
+  for (badge in unique(df$Badge)){
+    overall_bar <- make_overall_bar(df = df, badge = badge)
+    report <- officer::read_docx() %>%
+      body_add_par("Time in Location data", style = "heading 1") %>%
+      body_add_par(paste("This is for badge",toString(badge)), style = "Normal") %>%
+      body_add_gg(overall_bar) %>%
+      print(target = file.path(getwd(),FB_report_dir,paste0(toString(badge),'.docx')))
+  }
 }
