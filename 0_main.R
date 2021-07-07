@@ -10,8 +10,8 @@ library(config)
 library(reticulate)
 library(lubridate)
 library(tidyverse)
-library(TraMineR)
-library(data.table)
+#library(TraMineR)
+#library(data.table)
 library(patchwork)
 debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
@@ -51,27 +51,24 @@ x <- get_weekly_report(
   look_back_days = 120, # 
   db_name = config$db_name,
   db_loc = config$db_loc,
-  badge_file = config$badge_file,
+  target_badges = get_active_badges(config$badge_file),
   weekly_report_dir = config$weekly_report_dir
   )
 
 
+create_FB_reports(
+  target_badges = get_active_badges(config$badge_file),
+  strt = config$FB_report_start,
+  stp = config$FB_report_stop,
+  FB_report_dir = config$FB_report_dir
+)
+
 # load some badge data
 x <- get_RTLS_data(
-  badges = 'all',#badges, 
-  strt = 'all',#strt, 
-  stp = 'all'#stp
+  badges = get_active_badges(config$badge_file),#'all',#badges, 
+  strt = config$FB_report_start,#'all',#strt, 
+  stp = config$FB_report_stop#'all'#stp
   )
-
-# run weekly report
-# get_weekly_report(
-#   anchor_date = lubridate::today(),
-#   weekly_report_range = config$weekly_report_range,
-#   db_name = config$db_name, 
-#   db_loc = config$db_loc,
-#   badge_file = config$badge_file,
-#   
-#   )
 
 # code into location categories
 y <- loc_code_badge_data(

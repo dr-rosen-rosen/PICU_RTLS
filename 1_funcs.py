@@ -200,58 +200,56 @@ def badge_reports(df,save_raw_data,save_badge_timelines,create_rollups,create_re
 
     return
 
+def get_active_badges(badge_file):
+    b = pd.read_excel(badge_file,index_col=None,header=0)
+    b = b[b.Active == 'Yes']
+    return b.RTLS_ID.unique()
+
 # new func for generating report
-def get_weekly_report(anchor_date,look_back_days,db_name,db_loc,badge_file,weekly_report_dir):
-    # set date variables
-    #if is.null(anchor_date):
-    #    rght_win = datetime.date.today()
-    rght_win = anchor_date
-    lft_win = rght_win - pd.Timedelta(look_back_days, unit='D')
-
-    # get badges
-    target_badges = pd.read_excel(badge_file,index_col=None,header=0)
-    target_badges = target_badges[target_badges.Active == 'Yes']
-    target_badges = target_badges.RTLS_ID.unique()
-    print('This many active badges... '+str(len(target_badges)))
-    #target_badges['RTLS_ID'] = target_badges['RTLS_ID'].astype('int')
-    #tables = ['Table_'+str(b) for b in target_badges]
-
-    # make connection and get data
-    engine = create_engine('sqlite:///'+db_loc+db_name)#os.path.join('sqlite:///',db_loc,db_name))
-    metadata = MetaData(bind=engine)
-    metadata.reflect()
-    connection = engine.connect()
-    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-    insp = inspect(engine)
-
-    #for each target badge, get data within ragne!
-    df_list = []
-    for t in target_badges:#tables:
-        if insp.has_table(str('Table_'+str(t))):
-            tbl = metadata.tables[str('Table_'+str(t))]
-            s = select([tbl]).where(and_(tbl.c.Time_In >= lft_win,tbl.c.Time_In <= rght_win))
-            #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
-            rp = connection.execute(s)
-            df = pd.DataFrame(rp.fetchall())
-            if df.empty:
-                print("Empty badge... "+str(t))
-            else:
-                print(len(df))
-                df.columns = rp.keys()
-                df['RTLS_ID'] = t
-                df_list.append(df)
-        else: pass
-    df = pd.concat(df_list)
-
-    df['Duration'] = (df.Time_Out - df.Time_In).astype('timedelta64[s]')/60
-    df = df.groupby(['RTLS_ID']).agg({'Duration': 'sum'})
-    df.sort_values('Duration',axis=0,inplace=True,ascending=True)
-    fname = 'IM_Badge_data_from_{}_to_{}_runOn{}.csv'.format(lft_win,rght_win,datetime.date(datetime.now()))
-    df.to_csv(os.path.join(os.getwd(),weekly_report_dir,fname)
-    print('Of the {} active badges, {} had data between {} and {}.'.format(len(target_badges),len(df),lft_win,rght_win))
-    print('These active badges did not have data: {}'.format(set(target_badges).difference(set(df.index.tolist()))))
-
-    return df
+# def get_weekly_report(anchor_date,look_back_days,db_name,db_loc,target_badges,weekly_report_dir):
+#     # set date variables
+#
+#     rght_win = anchor_date
+#     lft_win = rght_win - pd.Timedelta(look_back_days, unit='D')
+#
+#     #print('This many active badges... '+str(len(target_badges)))
+#
+#     # make connection and get data
+#     engine = create_engine('sqlite:///'+db_loc+db_name)#os.path.join('sqlite:///',db_loc,db_name))
+#     metadata = MetaData(bind=engine)
+#     metadata.reflect()
+#     connection = engine.connect()
+#     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+#     insp = inspect(engine)
+#
+#     #for each target badge, get data within ragne!
+#     df_list = []
+#     for t in target_badges:#tables:
+#         if insp.has_table(str('Table_'+str(t))):
+#             tbl = metadata.tables[str('Table_'+str(t))]
+#             s = select([tbl]).where(and_(tbl.c.Time_In >= lft_win,tbl.c.Time_In <= rght_win))
+#             #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
+#             rp = connection.execute(s)
+#             df = pd.DataFrame(rp.fetchall())
+#             if df.empty:
+#                 print("Empty badge... "+str(t))
+#             else:
+#                 print(len(df))
+#                 df.columns = rp.keys()
+#                 df['RTLS_ID'] = t
+#                 df_list.append(df)
+#         else: pass
+#     df = pd.concat(df_list)
+#
+#     df['Duration'] = (df.Time_Out - df.Time_In).astype('timedelta64[s]')/60
+#     df = df.groupby(['RTLS_ID']).agg({'Duration': 'sum'})
+#     df.sort_values('Duration',axis=0,inplace=True,ascending=True)
+#     fname = 'IM_Badge_data_from_{}_to_{}_runOn{}.csv'.format(lft_win,rght_win,datetime.date(datetime.now()))
+#     df.to_csv(os.path.join(os.getwd(),weekly_report_dir,fname)
+#     print('Of the {} active badges, {} had data between {} and {}.'.format(len(target_badges),len(df),lft_win,rght_win))
+#     print('These active badges did not have data: {}'.format(set(target_badges).difference(set(df.index.tolist()))))
+#
+#     return df
 
 ####################################################################################################
 ############################## Reads in files and stores them in database

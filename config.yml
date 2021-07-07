@@ -10,6 +10,9 @@ default:
     rule_2_locs: !expr list('MD Workroom')
     badge_file: '/Users/mrosen44/Johns Hopkins University/Amanda Bertram - Graduate Medical Training Laboratory/RTLS Badge Status.xlsx'
     weekly_report_dir: '/Output/WeeklyReportDocs/'
+    FB_report_dir: '/Output/FeedbackReportDocs/'
+    FB_report_start: !expr as.POSIXct("2019-07-28") #lubridate::ymd_hms("2019-07-28 00:00:00")
+    FB_report_stop: !expr as.POSIXct("2019-08-28") #lubridate::ymd_hms("2019-08-28 00:00:00") 
     badge_timeline_dir: !expr getwd()
     weekly_report_range: 7 # days to look back for reports
 
