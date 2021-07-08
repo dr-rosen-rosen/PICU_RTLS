@@ -16,6 +16,7 @@ library(DBI)
 
 get_RTLS_data <- function(badges, strt, stp) {
   # set up empty dataframe to store
+  print("Pulling RTLS data...")
   all_data <- data.frame(
     Receiver = integer(),
     Time_In = .POSIXct(character()),
@@ -45,10 +46,10 @@ get_RTLS_data <- function(badges, strt, stp) {
     
       badge_data$Badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
       all_data <- rbind(all_data, badge_data)
-      print(nrow(badge_data))
+      print(paste(nrow(badge_data),'rows for badge',badge))
     } else {print(paste('No Table for ',badge,' ...'))}
   }
-  all_data
+  return(all_data)
 }
 
 ###############################################################################################
@@ -56,8 +57,11 @@ get_RTLS_data <- function(badges, strt, stp) {
 ###############################################################################################
 
 make_overall_bar <- function(df, badge){
+
   df$Receiver_recode <- factor(df$Receiver_recode, 
                         levels = c('Patient room','MD Workroom','Ward Hall','Education','Supply and admin','Transit','OTHER/UNKNOWN','Family waiting space'))
+  df <- df %>% transform(
+    Receiver_recode=plyr::revalue(Receiver_recode,c("OTHER/UNKNOWN"="Other",'Family waiting space'='Family space')))
   ### structure data
   overall_summary <- df %>% group_by(Receiver_recode) %>%
     summarise(total_time = sum(Duration,na.rm = TRUE)) %>%
@@ -79,12 +83,11 @@ make_overall_bar <- function(df, badge){
     theme(axis.text.x = element_text(angle = 90, hjust=0.95), legend.position=c(.85,1), legend.title = element_blank()) +
     labs(
       title = 'Proportion of time spent in locations',
-      #subtitle = paste('From',lubridate::date(min(df$Time_In)),'to',lubridate::date(max(df$Time_Out))),
+      subtitle = paste('From',lubridate::date(min(df$Time_In)),'to',lubridate::date(max(df$Time_Out))),
       x = 'Locations',
       y = 'Proportion of time'
     ) + scale_y_continuous(labels = scales::percent_format(scale = 1))
-    #scale_color_hue() +
-    #theme_classic()
+
   return(summary_fig)
 }
 
@@ -93,6 +96,7 @@ make_overall_bar <- function(df, badge){
 ###############################################################################################
 
 make_area_plot <- function(df, perc, badge) {
+
   if (is.null(badge)) {
     source_title_str <- 'all badges'
   } else {
@@ -101,6 +105,14 @@ make_area_plot <- function(df, perc, badge) {
   
   df$Location <- factor(df$Location, 
                         levels = c('Patient room','MD Workroom','Ward Hall','Education','Supply and admin','Transit','OTHER/UNKNOWN','Family waiting space'))
+  df <- df %>% transform(
+            Location=plyr::revalue(Location,c("OTHER/UNKNOWN"="Other",'Family waiting space'='Family space')))
+  #inserts 0 for all missing location by hour combintions to avoid gaps on area chart
+  combinations <- expand.grid(hour = unique(df$hour), Location = unique(df$Location))
+  df <- df %>%
+    full_join(combinations, by = c('hour' = 'hour','Location' = 'Location')) %>%
+    mutate(Duration = ifelse(is.na(Duration), 0, Duration)) %>%
+    arrange(hour, Location)
   if (perc) {
     plt <- df %>%
       group_by(hour, Location) %>%
@@ -111,12 +123,12 @@ make_area_plot <- function(df, perc, badge) {
       )
     plt <- plt + scale_y_continuous(labels = scales::percent_format(scale = 1))
     metric_title_string <- "Percent"
-    x_lab_text <- "Percentage of time spent in location"
+    y_lab_text <- "Percentage of time"
   } else {
   plt <- df %>% ggplot(
          aes(x=hour, y=Duration,fill=Location))
   metric_title_string <- "Total"
-  x_lab_text <- "Time spent in location (minutes)"
+  y_lab_text <- "Minutes"
   }
   plt <- plt +
     geom_area(colour="white") + #alpha=0.6 , size=.5,
@@ -125,12 +137,12 @@ make_area_plot <- function(df, perc, badge) {
     theme_light() +
     labs(
       title = paste(metric_title_string,"Time Spent in Locations"),
-      #subtitle = paste('For',source_title_str,'from',lubridate::date(min(df$Time_In)),'to',lubridate::date(max(df$Time_Out))),
-      y = x_lab_text,
+      # subtitle = paste('For',source_title_str,'from',lubridate::date(min(df$Time_In)),'to',lubridate::date(max(df$Time_Out))),
+      y = y_lab_text,
       x = 'Hour of the day'
     ) + 
     scale_x_continuous(breaks = seq(0, 23, by = 4))
-
+  return(plt)
 }
 
 ###############################################################################################
@@ -140,24 +152,67 @@ make_area_plot <- function(df, perc, badge) {
 ### Creates one feedback report
 
 create_FB_reports <- function(target_badges, strt, stp, FB_report_dir) {
-  # pull data
+  # pull and process data
   df <- get_RTLS_data(
     badges = target_badges,
     strt = strt,
     stp = stp
   )
+
   df <- loc_code_badge_data(
     badge_data = df,
     db_name = config$db_name,
     db_loc = config$db_loc
   )
+
+  df <- apply_rules(
+    df = df,
+    rule_1_thresh = config$rule_1_thresh,
+    rule_2_thresh = config$rule_2_thresh,
+    rule_2_locs = config$rule_2_locs
+  )
+
+  df <- df %>%
+    group_by(Badge) %>%
+    filter(sum(Duration) > (config$min_hours_for_fb * 60))
+
   # make reports
   for (badge in unique(df$Badge)){
     overall_bar <- make_overall_bar(df = df, badge = badge)
-    report <- officer::read_docx() %>%
-      body_add_par("Time in Location data", style = "heading 1") %>%
-      body_add_par(paste("This is for badge",toString(badge)), style = "Normal") %>%
+    ind_area_norm <- make_area_plot(
+      df = make_timeseries_df_for_dummies(df = df[which(df$Badge == badge), ]),#,f = 'S'),
+      perc = TRUE, #if true, will create porportional chart ,if false will do raw
+      badge = badge # if NULL this assumes a summary plot; if an int it will use that in plot titles
+    )
+    ind_area_raw <- make_area_plot(
+      df = make_timeseries_df_for_dummies(df = df[which(df$Badge == badge), ]),#,f = 'S'),
+      perc = FALSE, #if true, will create porportional chart ,if false will do raw
+      badge = badge # if NULL this assumes a summary plot; if an int it will use that in plot titles
+    )
+    tot_hours <-sum(df[which(df$Badge == badge),'Duration']) / 60
+    tot_hours <- round(tot_hours,digits = 1)
+    area_plots <- ind_area_raw / ind_area_norm + plot_layout(guides = 'collect') & theme(legend.position='bottom')
+    report <- officer::read_docx(path = config$FB_report_template) %>%
+      body_add_par("Time in Location Data Report", style = "Title") %>%
+      body_add_par(paste("Badge:",toString(badge)), style = 'Normal') %>%
+      body_add_par(paste("From:",lubridate::date(min(df$Time_In)),"to",lubridate::date(max(df$Time_Out))), style = 'Normal') %>%
+      body_add_par(paste("Total hours in this report:",toString(tot_hours)), style = 'Normal') %>%
+      body_add_par('') %>%
+      body_add_par(config$FB_intro_para) %>%
+      body_add_par('') %>%
+      body_add_par("Where does the data come from?", style = 'Subtitle') %>%
+      body_add_par(config$FB_where_para, style = 'Normal') %>%
+      body_add_par('') %>%
+      body_add_par('What am I supposed to do with this data?', style = 'Subtitle') %>%
+      body_add_par(config$FB_what_para, style = 'Normal') %>%
+      body_add_break(pos = "after") %>%
+      body_add_par("Where you spend your time compared to your peers", style = 'Subtitle') %>%
+      body_add_par('') %>%
       body_add_gg(overall_bar) %>%
+      body_add_break(pos = "after") %>%
+      body_add_par("Where you spend your time throughout the day", style = 'Subtitle') %>%
+      body_add_par('') %>%
+      body_add_gg(area_plots) %>%
       print(target = file.path(getwd(),FB_report_dir,paste0(toString(badge),'.docx')))
   }
 }

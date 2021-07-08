@@ -88,9 +88,11 @@ z <- apply_rules(
 zz <- make_interval_metrics(df = z)
 
 zzz <- make_timeseries_df(
-  df = z,#, %>% filter(between(Time_In,min(z$Time_In),min(z$Time_In)+days(14))),
-  f = 'S'#'min' # Using a minute for this seems to overinflate 'transition' ... i think because there are many small hits that all get rounded up... 'S' takes forever though
+  df = z[which(z$Badge == 308759),],#, %>% filter(between(Time_In,min(z$Time_In),min(z$Time_In)+days(14))),
+  f = 'm'#'min' # Using a minute for this seems to overinflate 'transition' ... i think because there are many small hits that all get rounded up... 'S' takes forever though
 )
+
+make_timeseries_df_for_dummies(z[which(z$Badge == 308759),])
 
 zzz_par <- make_timeseries_df_PAR(
   #fun = ts_it_PAR,
