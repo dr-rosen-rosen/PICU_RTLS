@@ -31,11 +31,7 @@ get_RTLS_data <- function(badges, strt, stp) {
       badges <- grep('Table_',tbls, value = TRUE)
     } else {badges <- as.list(paste0('Table_',badges))}
     }
-<<<<<<< HEAD
 
-=======
-    print(strt)
->>>>>>> 1428f5903e64b5e0b69698a1a19911c40ae83a79
   # loops through each badge and returns data in timerange
   for (badge in badges) {
     if (DBI::dbExistsTable(conn = con, name = badge)) {
@@ -43,25 +39,14 @@ get_RTLS_data <- function(badges, strt, stp) {
       tbl(badge) %>%
       collect() %>%
       mutate(across(c('Time_In','Time_Out'), lubridate::ymd_hms))
-<<<<<<< HEAD
+
     # Set time filters
       badge_data <- badge_data %>% filter(Time_In >= as.Date(strt) & Time_Out <= as.Date(stp))
-=======
-      print('here 1')
-    # Set time filters
-      badge_data <- badge_data %>% filter(Time_In >= as.Date(strt) & Time_Out <= as.Date(stp))
-      print('here 2')
->>>>>>> 1428f5903e64b5e0b69698a1a19911c40ae83a79
     #else if (strt != 'all' & stp == 'all') {badge_data <- badge_data %>% filter(Time_In >= strt)} 
     #else if (strt == 'all' & stp != 'all') {badge_data <- badge_data %>% filter(Time_Out <= stp)} 
     
       badge_data$Badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
       all_data <- rbind(all_data, badge_data)
-<<<<<<< HEAD
-      print(paste(nrow(badge_data),'rows for badge',badge))
-=======
-      print(nrow(badge_data))
->>>>>>> 1428f5903e64b5e0b69698a1a19911c40ae83a79
     } else {print(paste('No Table for ',badge,' ...'))}
   }
   return(all_data)
@@ -102,12 +87,7 @@ make_overall_bar <- function(df, badge){
       x = 'Locations',
       y = 'Proportion of time'
     ) + scale_y_continuous(labels = scales::percent_format(scale = 1))
-<<<<<<< HEAD
 
-=======
-    #scale_color_hue() +
-    #theme_classic()
->>>>>>> 1428f5903e64b5e0b69698a1a19911c40ae83a79
   return(summary_fig)
 }
 
@@ -237,31 +217,3 @@ create_FB_reports <- function(target_badges, strt, stp, FB_report_dir) {
   }
 }
 
-###############################################################################################
-#####################   Functions for creating feedback reports
-###############################################################################################
-
-### Creates one feedback report
-
-create_FB_reports <- function(target_badges, strt, stp, FB_report_dir) {
-  # pull data
-  df <- get_RTLS_data(
-    badges = target_badges,
-    strt = strt,
-    stp = stp
-  )
-  df <- loc_code_badge_data(
-    badge_data = df,
-    db_name = config$db_name,
-    db_loc = config$db_loc
-  )
-  # make reports
-  for (badge in unique(df$Badge)){
-    overall_bar <- make_overall_bar(df = df, badge = badge)
-    report <- officer::read_docx() %>%
-      body_add_par("Time in Location data", style = "heading 1") %>%
-      body_add_par(paste("This is for badge",toString(badge)), style = "Normal") %>%
-      body_add_gg(overall_bar) %>%
-      print(target = file.path(getwd(),FB_report_dir,paste0(toString(badge),'.docx')))
-  }
-}

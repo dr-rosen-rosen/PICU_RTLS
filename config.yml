@@ -11,14 +11,11 @@ default:
     badge_file: '/Users/mrosen44/Johns Hopkins University/Amanda Bertram - Graduate Medical Training Laboratory/RTLS Badge Status.xlsx'
     weekly_report_dir: '/Output/WeeklyReportDocs/'
     FB_report_dir: '/Output/FeedbackReportDocs/'
-<<<<<<< HEAD
     FB_report_template: 'Output/Templates/FB_report_template.docx'
     FB_report_start: !expr as.POSIXct("2019-07-28") #lubridate::ymd_hms("2019-07-28 00:00:00")
     FB_report_stop: !expr as.POSIXct("2019-08-28") #lubridate::ymd_hms("2019-08-28 00:00:00")
-=======
     FB_report_start: !expr as.POSIXct("2019-07-28") #lubridate::ymd_hms("2019-07-28 00:00:00")
     FB_report_stop: !expr as.POSIXct("2019-08-28") #lubridate::ymd_hms("2019-08-28 00:00:00") 
->>>>>>> 1428f5903e64b5e0b69698a1a19911c40ae83a79
     badge_timeline_dir: !expr getwd()
     weekly_report_range: 7 # days to look back for reports
     min_hours_for_fb: 80
