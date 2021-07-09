@@ -101,20 +101,6 @@ zzz_par <- make_timeseries_df_PAR(
   num_processes = NULL
 )
 
-ind_area_norm <- make_area_plot(
-  df = make_timeseries_df(df = z[which(z$Badge == 451616), ],f = 'min'),
-  perc = TRUE, #if true, will create porportional chart ,if false will do raw
-  badge = 451616 # if NULL this assumes a summary plot; if an int it will use that in plot titles
-)
-show(ind_area_norm)
-
-col_area_norm <- make_area_plot(
-  df = zzz,#make_timeseries_df(df = z[which(z$Badge == 403606), ],f = 'min'),
-  perc = TRUE, #if true, will create porportional chart ,if false will do raw
-  badge = NULL#403606 # if NULL this assumes a summary plot; if an int it will use that in plot titles
-)
-show(col_area_norm)
-
 # test <- make_seqdef_data(
 #   df = z[which(z$Badge == 474612), ],
 #   start = strt,
@@ -126,48 +112,3 @@ show(col_area_norm)
 # test2[is.nan(test2)] <- NA
 # loc_seq <- TraMineR::seqdef(test,id='auto')
 
-overall_bar <- make_overall_bar(
-  df = z, #%>% filter(between(Time_In,min(z$Time_In),min(z$Time_In)+days(14))),
-  badge = 403606
-)
-show(overall_bar)
-
-overall_area_raw <- make_area_plot(
-  df = zzz,
-  perc = FALSE, #if true, will create porportional chart ,if false will do raw
-  badge = NULL # if NULL this assumes a summary plot; if an int it will use that in plot titles
-
-)
-show(overall_area_raw)
-
-overall_area_perc <- make_area_plot(
-  df = zzz,
-  perc = TRUE, #if true, will create porportional chart ,if false will do raw
-  badge = NULL # if NULL this assumes a summary plot; if an int it will use that in plot titles
-
-)
-show(overall_area_perc)
-
-badge_area_raw <- make_area_plot(
-  df = zzz,
-  perc = FALSE, #if true, will create porportional chart ,if false will do raw
-  badge = 474612 # if NULL this assumes a summary plot; if an int it will use that in plot titles
-)
-show(badge_area_raw)
-
-badge_area_perc <- make_area_plot(
-  df = zzz,
-  perc = TRUE, #if true, will create porportional chart ,if false will do raw
-  badge = 474612 # if NULL this assumes a summary plot; if an int it will use that in plot titles
-)
-show(badge_area_perc)
-
-#(overall_area_raw | overall_area_perc) / (badge_area_raw | badge_area_perc)  + plot_layout(guides = 'collect')
-
-overall_bar | (col_area_norm / ind_area_norm) + plot_layout(guides = 'collect')
-
-### make _workflow diagram?
-### busiest day? Day with most pt room time?
-### make_network
-### put into word doc... officer... create template
-### profit.
