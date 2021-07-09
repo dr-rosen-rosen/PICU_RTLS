@@ -132,7 +132,7 @@ make_area_plot <- function(df, perc, badge) {
   }
   plt <- plt +
     geom_area(colour="white") + #alpha=0.6 , size=.5,
-    scale_fill_viridis(discrete = T) +
+    scale_fill_viridis(discrete = TRUE, direction = -1) +
     #theme_ipsum() +
     theme_light() +
     labs(
