@@ -576,10 +576,6 @@ def make_seqdef_data(df,start,stop,f):
 def make_timeseries_df(df,f):
     # set up overall dataframe for tracking time series
 
-    #df['Dif'] = (df.Time_Out - df.Time_In).astype('timedelta64['+f+']')
-    #df = df[df.Dif > 1]
-    #df.drop(columns = ['Dif'], inplace = True)
-    #df.to_csv('test_ts0_2.csv')
     badges = [b for b in df.Badge.unique().astype('int')]
     locs = df.Receiver_recode.unique().tolist()
     cols = pd.MultiIndex.from_product([badges, locs],
@@ -597,27 +593,20 @@ def make_timeseries_df(df,f):
         for loc in locs:
             mask = ((df.Badge == badge) & (df.Receiver_recode == loc))
             df_ts[badge,loc] = ts_it(idx,df[mask]['Time_In'].values,df[mask]['Time_Out'].values)
-    #df_ts.head(10000).to_csv('test_ts_2.csv')
     # this collapses across all badges for a 'total' with multiple badges
     # or just one if only data for one badge is passed to function
     df_ts = df_ts.groupby(level = 'Location', axis = 1).sum()
-    #df_ts.head(10000).to_csv('test_ts2_2.csv')
     df_ts = df_ts.groupby(df_ts.index.hour).sum()
     df_ts.index.rename('hour', inplace = True)
     df_ts.reset_index(inplace = True)
     df_ts = df_ts.melt(id_vars = ['hour'],value_name = 'Duration')
-
     return df_ts
 
 def make_timeseries_df_for_dummies(df):
-    print('start make for dummies')
     df.rename(columns = {'Time_In':'hour','Receiver_recode':'Location'},inplace = True)
     df.set_index('hour', inplace = True)
-    print('here!')
     df = df.groupby([df.index.hour, 'Location'])['Duration'].sum()
-    print('here 2!')
     df = df.reset_index()
-    df.to_csv('For_dummies2.csv')
     return df
 
 def ts_it_PAR(df_chunk):
