@@ -206,50 +206,51 @@ def get_active_badges(badge_file):
     return b.RTLS_ID.unique()
 
 # new func for generating report
-# def get_weekly_report(anchor_date,look_back_days,db_name,db_loc,target_badges,weekly_report_dir):
-#     # set date variables
-#
-#     rght_win = anchor_date
-#     lft_win = rght_win - pd.Timedelta(look_back_days, unit='D')
-#
-#     #print('This many active badges... '+str(len(target_badges)))
-#
-#     # make connection and get data
-#     engine = create_engine('sqlite:///'+db_loc+db_name)#os.path.join('sqlite:///',db_loc,db_name))
-#     metadata = MetaData(bind=engine)
-#     metadata.reflect()
-#     connection = engine.connect()
-#     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-#     insp = inspect(engine)
-#
-#     #for each target badge, get data within ragne!
-#     df_list = []
-#     for t in target_badges:#tables:
-#         if insp.has_table(str('Table_'+str(t))):
-#             tbl = metadata.tables[str('Table_'+str(t))]
-#             s = select([tbl]).where(and_(tbl.c.Time_In >= lft_win,tbl.c.Time_In <= rght_win))
-#             #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
-#             rp = connection.execute(s)
-#             df = pd.DataFrame(rp.fetchall())
-#             if df.empty:
-#                 print("Empty badge... "+str(t))
-#             else:
-#                 print(len(df))
-#                 df.columns = rp.keys()
-#                 df['RTLS_ID'] = t
-#                 df_list.append(df)
-#         else: pass
-#     df = pd.concat(df_list)
-#
-#     df['Duration'] = (df.Time_Out - df.Time_In).astype('timedelta64[s]')/60
-#     df = df.groupby(['RTLS_ID']).agg({'Duration': 'sum'})
-#     df.sort_values('Duration',axis=0,inplace=True,ascending=True)
-#     fname = 'IM_Badge_data_from_{}_to_{}_runOn{}.csv'.format(lft_win,rght_win,datetime.date(datetime.now()))
-#     df.to_csv(os.path.join(os.getwd(),weekly_report_dir,fname)
-#     print('Of the {} active badges, {} had data between {} and {}.'.format(len(target_badges),len(df),lft_win,rght_win))
-#     print('These active badges did not have data: {}'.format(set(target_badges).difference(set(df.index.tolist()))))
-#
-#     return df
+def get_weekly_report(anchor_date,look_back_days,db_name,db_loc,target_badges,weekly_report_dir):
+    # set date variables
+    rght_win = anchor_date
+    lft_win = rght_win - pd.Timedelta(look_back_days, unit='D')
+
+    print('This many active badges... '+str(len(target_badges)))
+
+    # make connection and get data
+    engine = create_engine('sqlite:///'+db_loc+db_name)#os.path.join('sqlite:///',db_loc,db_name))
+    metadata = MetaData(bind=engine)
+    metadata.reflect()
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+    insp = inspect(engine)
+
+    #for each target badge, get data within ragne!
+    df_list = []
+    target_badges = [int(b) for b in target_badges]
+    for t in target_badges:#tables:
+        print(t)
+        if insp.has_table(str('Table_'+str(t))):
+            tbl = metadata.tables[str('Table_'+str(t))]
+            s = select([tbl]).where(and_(tbl.c.Time_In >= lft_win,tbl.c.Time_In <= rght_win))
+            #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
+            rp = connection.execute(s)
+            df = pd.DataFrame(rp.fetchall())
+            if df.empty:
+                print("Empty badge... "+str(t))
+            else:
+                print(len(df))
+                df.columns = rp.keys()
+                df['RTLS_ID'] = t
+                df_list.append(df)
+        else: print("no table")#pass
+    df = pd.concat(df_list)
+
+    df['Duration'] = (df.Time_Out - df.Time_In).astype('timedelta64[s]')/60
+    df = df.groupby(['RTLS_ID']).agg({'Duration': 'sum'})
+    df.sort_values('Duration',axis=0,inplace=True,ascending=True)
+    fname = 'IM_Badge_data_from_{}_to_{}_runOn{}.csv'.format(lft_win,rght_win,datetime.date(datetime.now()))
+    df.to_csv(os.path.join(weekly_report_dir,fname))
+    print("Of the {} active badges, {} had data between {} and {}".format(len(target_badges),len(df),lft_win,rght_win))
+    print('These active badges did not have data: {}'.format(set(target_badges).difference(set(df.index.tolist()))))
+
+    return df
 
 ####################################################################################################
 ############################## Reads in files and stores them in database
@@ -315,7 +316,7 @@ def csv_to_db(db_name, db_loc, in_path):
 ####################################################################################################
 ############################## Looks at all recievers in db, and adds location code for those with none
 ####################################################################################################
-def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file,rcvr_recode_file_loc):
+def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file,rcvr_recode_file_loc, print_new_recievers):
     #### This function pulls all RTLS recievers in the database which do not have a location code, and
     #### codes and updates the reciever table.
 
@@ -379,6 +380,7 @@ def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file,rcvr_recode_file_loc
                             }
         receivers['ReceiverDescription_IMRes'].replace(loc_collapse_dict,inplace=True)
         print(len(receivers))
+        if print_new_recievers: receivers.to_csv('new_recievers_runOn{}.csv'.format(datetime.date(datetime.now())))
         # Saves the locations back to DB
         for i, row in receivers.iterrows():
             stmt = update(RTLS_Receivers).where(RTLS_Receivers.c.Receiver == row.Receiver).values(LocationCode = row.ReceiverDescription_IMRes)

@@ -52,6 +52,23 @@ get_RTLS_data <- function(badges, strt, stp) {
   return(all_data)
 }
 
+# pulls all reciever location data... used for manual review and update
+get_receiver_loc_data <- function(con) {
+  receiver_data <- con %>%
+    tbl('RTLS_Receivers') %>%
+    collect()
+  return(receiver_data)
+}
+
+manual_receiver_update <- function(df, con) {
+  for (i in rownames(df)) {
+    update_stmt <- paste("update RTLS_Receivers",
+                       "set LocationCode =",paste0('\"',df[i,'LocationCode'],'\"'),
+                       "where Receiver = ",df[i,"Receiver"])
+    print(update_stmt)
+    DBI::dbSendQuery(con, update_stmt)
+    }
+}
 ###############################################################################################
 #####################   Creates a bar charts
 ###############################################################################################
@@ -151,7 +168,7 @@ make_area_plot <- function(df, perc, badge) {
 
 ### Creates one feedback report
 
-create_FB_reports <- function(target_badges, strt, stp, FB_report_dir) {
+create_FB_reports <- function(target_badges, strt, stp, FB_report_dir, save_badge_timeline) {
   # pull and process data
   df <- get_RTLS_data(
     badges = target_badges,
@@ -214,6 +231,9 @@ create_FB_reports <- function(target_badges, strt, stp, FB_report_dir) {
       body_add_par('') %>%
       body_add_gg(area_plots) %>%
       print(target = file.path(getwd(),FB_report_dir,paste0(toString(badge),'.docx')))
+    if (save_badge_timeline == TRUE) {
+      write.csv(df[which(df$Badge == badge), ],file.path(getwd(),FB_report_dir,paste0(toString(badge),'_timeline.csv')))
+    }
   }
 }
 
