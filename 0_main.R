@@ -34,8 +34,18 @@ rcvr_dscrp_to_loc_code(
   db_name = config$db_name,
   db_loc = config$db_loc,
   rcvr_recode_file = config$rcvr_recode_file,
-  rcvr_recode_file_loc = config$rcvr_recode_file_loc
+  rcvr_recode_file_loc = config$rcvr_recode_file_loc,
+  print_new_recievers = TRUE
   )
+
+########## Manul review and update of locations in table
+rec_df <- get_receiver_loc_data(
+  con = con
+)
+write_csv(rec_df, path = 'receiver_recode.csv')
+df <- read.csv('receiver_recode_reviewed.csv')
+manual_receiver_update(df = df, con = con)
+
 
 # test variables
 #badges <- c('451616','404057')
@@ -48,7 +58,7 @@ stp <- as.POSIXct("2019-08-12")#lubridate::ymd("2019-08-12")
 
 x <- get_weekly_report(
   anchor_date = lubridate::today(),
-  look_back_days = 120, # 
+  look_back_days = 7, # 
   db_name = config$db_name,
   db_loc = config$db_loc,
   target_badges = get_active_badges(config$badge_file),
@@ -60,7 +70,8 @@ create_FB_reports(
   target_badges = get_active_badges(config$badge_file),
   strt = config$FB_report_start,
   stp = config$FB_report_stop,
-  FB_report_dir = config$FB_report_dir
+  FB_report_dir = config$FB_report_dir,
+  save_badge_timeline = TRUE
 )
 
 # load some badge data
