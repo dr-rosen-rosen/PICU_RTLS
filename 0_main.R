@@ -58,7 +58,7 @@ stp <- as.POSIXct("2019-08-12")#lubridate::ymd("2019-08-12")
 
 x <- get_weekly_report(
   anchor_date = lubridate::today(),
-  look_back_days = 7, # 
+  look_back_days = 8, # 
   db_name = config$db_name,
   db_loc = config$db_loc,
   target_badges = get_active_badges(config$badge_file),
@@ -71,15 +71,17 @@ create_FB_reports(
   strt = config$FB_report_start,
   stp = config$FB_report_stop,
   FB_report_dir = config$FB_report_dir,
-  save_badge_timeline = TRUE
+  save_badge_timeline = FALSE
 )
 
 # load some badge data
 x <- get_RTLS_data(
-  badges = get_active_badges(config$badge_file),#'all',#badges, 
-  strt = config$FB_report_start,#'all',#strt, 
-  stp = config$FB_report_stop#'all'#stp
+  badges = '522400',  #get_active_badges(config$badge_file),#'all',#badges, 
+  strt = config$FB_report_start,#ymd_hms("2019-07-28"),#config$FB_report_start,#'all',#strt, 
+  stp = config$FB_report_stop #config$FB_report_stop#'all'#stp
   )
+
+
 
 # code into location categories
 y <- loc_code_badge_data(
@@ -94,6 +96,53 @@ z <- apply_rules(
   rule_2_thresh = config$rule_2_thresh,
   rule_2_locs = config$rule_2_locs
   )
+
+# Build network viz
+net_data <- prep_net_data(
+  df = y,
+  #duration_thresh =
+  net_format = 'D3'
+    )
+# library(network)
+# rtls_network <- network(
+#   net_data$edges, 
+#   #vertex.attr = net_data$nodes, 
+#   matrix.type = "edgelist", 
+#   ignore.eval = FALSE)
+# plot(rtls_network, vertex.cex = 3)
+# detach(package:network)
+
+library(igraph)
+
+rtls_network <- igraph::graph_from_data_frame(
+  d = net_data$edges,
+  vertices = net_data$nodes,
+  directed = TRUE
+)
+plot(rtls_network,
+     layout = layout_with_graphopt)
+
+library(visNetwork)
+
+visNetwork(net_data$nodes,net_data$edges)
+
+library(networkD3)
+forceNetwork(Links = net_data$edges,
+             Nodes = net_data$nodes,
+             Source = "from", 
+             Target = "to", 
+             NodeID = "description", 
+             Group = "type", 
+             Value = "weight",
+             Nodesize = "duration",
+             opacity = 1, 
+             fontSize = 16, 
+             zoom = TRUE,
+             legend = TRUE)
+
+write_csv(net_data$nodes,path = '522400.csv')
+
+
 #z <- z %>% filter(between(Time_In,as.POSIXct(ydm("2019-28-7")),as.POSIXct(ydm("2019-12-8"))))
 
 zz <- make_interval_metrics(df = z)

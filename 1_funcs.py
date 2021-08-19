@@ -651,3 +651,12 @@ def make_timeseries_df_PAR(df,f,num_processes):
         pool.terminate()
         for i in results_list: print(i[0])
         return 'ok'#pd.concat(results_list, axis=1)#,keys = df.Badge.unique())
+
+####################################################################################################
+############################## Helper functions for network data manipulation
+####################################################################################################
+
+def relabel_nodes(df, nodes):
+    node_dict = dict(zip(nodes.rec_num,nodes.id))
+    df['Receiver'] = df['Receiver'].map(node_dict)
+    return(df)
