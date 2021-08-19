@@ -12,8 +12,8 @@ default:
     weekly_report_dir: '/Users/mrosen44/Documents/Data_Analysis_Local/GEL_RTLS/Output/WeeklyReportDocs/'
     FB_report_dir: '/Output/FeedbackReportDocs/'
     FB_report_template: 'Output/Templates/FB_report_template.docx'
-    FB_report_start: !expr as.POSIXct("2021-07-03") #lubridate::ymd_hms("2019-07-28 00:00:00")
-    FB_report_stop: !expr as.POSIXct("2021-07-18") #lubridate::ymd_hms("2019-08-28 00:00:00")
+    FB_report_start: !expr as.POSIXct("2021-08-01") #lubridate::ymd_hms("2019-07-28 00:00:00")
+    FB_report_stop: !expr as.POSIXct("2021-08-16") #lubridate::ymd_hms("2019-08-28 00:00:00")
     badge_timeline_dir: !expr getwd()
     weekly_report_range: 7 # days to look back for reports
     min_hours_for_fb: 80

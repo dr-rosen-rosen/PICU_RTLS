@@ -10,6 +10,7 @@ library(viridis)
 library(hrbrthemes)
 library(officer)
 library(DBI)
+library(network)
 ###############################################################################################
 #####################   Pulls data for specific badges and time range
 ###############################################################################################
@@ -31,20 +32,16 @@ get_RTLS_data <- function(badges, strt, stp) {
       badges <- grep('Table_',tbls, value = TRUE)
     } else {badges <- as.list(paste0('Table_',badges))}
     }
-
   # loops through each badge and returns data in timerange
   for (badge in badges) {
     if (DBI::dbExistsTable(conn = con, name = badge)) {
+      # Read in data and filter by time
       badge_data <- con %>%
       tbl(badge) %>%
       collect() %>%
-      mutate(across(c('Time_In','Time_Out'), lubridate::ymd_hms))
-
-    # Set time filters
-      badge_data <- badge_data %>% filter(Time_In >= as.Date(strt) & Time_Out <= as.Date(stp))
-    #else if (strt != 'all' & stp == 'all') {badge_data <- badge_data %>% filter(Time_In >= strt)} 
-    #else if (strt == 'all' & stp != 'all') {badge_data <- badge_data %>% filter(Time_Out <= stp)} 
-    
+      mutate(across(c('Time_In','Time_Out'), lubridate::ymd_hms)) %>% 
+      filter(Time_In > strt & Time_In < stp) # start and stop times are non-inclusive
+      
       badge_data$Badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
       all_data <- rbind(all_data, badge_data)
     } else {print(paste('No Table for ',badge,' ...'))}
@@ -237,3 +234,41 @@ create_FB_reports <- function(target_badges, strt, stp, FB_report_dir, save_badg
   }
 }
 
+###############################################################################################
+#####################   Functions for network metrics and visualization
+###############################################################################################
+
+prep_net_data <- function(df, net_format) {
+  
+  # This funciton takes an RTLS df and creates files for:
+  #   Edges
+  #   Nodes
+  nodes <- df %>% 
+    group_by(Receiver) %>%
+    summarize(duration = sum(Duration)) %>%
+    ungroup() %>%
+    mutate(id = row_number() - 1) %>%
+    left_join(
+      distinct(df,Receiver,Receiver_recode, Receiver_name),
+      by = "Receiver"
+    ) %>%
+    rename(rec_num = Receiver,
+           type = Receiver_recode,
+           description = Receiver_name)
+  
+  #adding back
+  distinct(df,Receiver,Receiver_recode)
+  
+  df <- relabel_nodes(df,nodes) # this just recodes the reciever id to the 'id' var from above; why is that so hard in R?
+  
+  edges <- df %>%
+    arrange(Time_In) %>% # makes sure rows are ordered in ascending time order
+    mutate(to = lead(Receiver)) %>% # creates new colum for destination link based on shifted Receiver column
+    na.omit() %>% # drops last row of NA created by shifting
+    rename(from = Receiver)  %>% # renames Receiver column to the 'from' end of edge
+    group_by(from, to) %>%
+    summarize(weight = n()) %>%
+    ungroup()
+  
+  return(list('nodes' = nodes, 'edges' = edges))
+}
