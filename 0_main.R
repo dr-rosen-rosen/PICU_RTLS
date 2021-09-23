@@ -58,7 +58,7 @@ stp <- as.POSIXct("2019-08-12")#lubridate::ymd("2019-08-12")
 
 x <- get_weekly_report(
   anchor_date = lubridate::today(),
-  look_back_days = 8, # 
+  look_back_days = 8, #
   db_name = config$db_name,
   db_loc = config$db_loc,
   target_badges = get_active_badges(config$badge_file),
@@ -76,8 +76,8 @@ create_FB_reports(
 
 # load some badge data
 x <- get_RTLS_data(
-  badges = '522400',  #get_active_badges(config$badge_file),#'all',#badges, 
-  strt = config$FB_report_start,#ymd_hms("2019-07-28"),#config$FB_report_start,#'all',#strt, 
+  badges = '522400',  #get_active_badges(config$badge_file),#'all',#badges,
+  strt = config$FB_report_start,#ymd_hms("2019-07-28"),#config$FB_report_start,#'all',#strt,
   stp = config$FB_report_stop #config$FB_report_stop#'all'#stp
   )
 
@@ -99,15 +99,13 @@ z <- apply_rules(
 
 # Build network viz
 net_data <- prep_net_data(
-  df = y,
-  #duration_thresh =
-  net_format = 'D3'
+  df = y
     )
 # library(network)
 # rtls_network <- network(
-#   net_data$edges, 
-#   #vertex.attr = net_data$nodes, 
-#   matrix.type = "edgelist", 
+#   net_data$edges,
+#   #vertex.attr = net_data$nodes,
+#   matrix.type = "edgelist",
 #   ignore.eval = FALSE)
 # plot(rtls_network, vertex.cex = 3)
 # detach(package:network)
@@ -129,14 +127,14 @@ visNetwork(net_data$nodes,net_data$edges)
 library(networkD3)
 forceNetwork(Links = net_data$edges,
              Nodes = net_data$nodes,
-             Source = "from", 
-             Target = "to", 
-             NodeID = "description", 
-             Group = "type", 
+             Source = "from",
+             Target = "to",
+             NodeID = "description",
+             Group = "type",
              Value = "weight",
              Nodesize = "duration",
-             opacity = 1, 
-             fontSize = 16, 
+             opacity = 1,
+             fontSize = 16,
              zoom = TRUE,
              legend = TRUE)
 
@@ -171,4 +169,3 @@ zzz_par <- make_timeseries_df_PAR(
 #   do.call(cbind, lapply(x, is.nan))
 # test2[is.nan(test2)] <- NA
 # loc_seq <- TraMineR::seqdef(test,id='auto')
-

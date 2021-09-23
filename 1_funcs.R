@@ -39,9 +39,9 @@ get_RTLS_data <- function(badges, strt, stp) {
       badge_data <- con %>%
       tbl(badge) %>%
       collect() %>%
-      mutate(across(c('Time_In','Time_Out'), lubridate::ymd_hms)) %>% 
+      mutate(across(c('Time_In','Time_Out'), lubridate::ymd_hms)) %>%
       filter(Time_In > strt & Time_In < stp) # start and stop times are non-inclusive
-      
+
       badge_data$Badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
       all_data <- rbind(all_data, badge_data)
     } else {print(paste('No Table for ',badge,' ...'))}
@@ -72,7 +72,7 @@ manual_receiver_update <- function(df, con) {
 
 make_overall_bar <- function(df, badge){
 
-  df$Receiver_recode <- factor(df$Receiver_recode, 
+  df$Receiver_recode <- factor(df$Receiver_recode,
                         levels = c('Patient room','MD Workroom','Ward Hall','Education','Supply and admin','Transit','OTHER/UNKNOWN','Family waiting space'))
   df <- df %>% transform(
     Receiver_recode=plyr::revalue(Receiver_recode,c("OTHER/UNKNOWN"="Other",'Family waiting space'='Family space')))
@@ -87,7 +87,7 @@ make_overall_bar <- function(df, badge){
     mutate(proportion_time = (total_time / sum(total_time, na.rm = TRUE)) * 100 )
   badge_summary$Source <- paste('Badge',badge)
   summary <- rbind(overall_summary,badge_summary)
-  
+
   ## overall figure
   summary_fig <- summary %>% ggplot() +
     aes(x = Receiver_recode, fill = Source, weight = proportion_time) +
@@ -116,8 +116,8 @@ make_area_plot <- function(df, perc, badge) {
   } else {
     source_title_str <- paste('badge',badge)
   }
-  
-  df$Location <- factor(df$Location, 
+
+  df$Location <- factor(df$Location,
                         levels = c('Patient room','MD Workroom','Ward Hall','Education','Supply and admin','Transit','OTHER/UNKNOWN','Family waiting space'))
   df <- df %>% transform(
             Location=plyr::revalue(Location,c("OTHER/UNKNOWN"="Other",'Family waiting space'='Family space')))
@@ -154,7 +154,7 @@ make_area_plot <- function(df, perc, badge) {
       # subtitle = paste('For',source_title_str,'from',lubridate::date(min(df$Time_In)),'to',lubridate::date(max(df$Time_Out))),
       y = y_lab_text,
       x = 'Hour of the day'
-    ) + 
+    ) +
     scale_x_continuous(breaks = seq(0, 23, by = 4))
   return(plt)
 }
@@ -238,12 +238,12 @@ create_FB_reports <- function(target_badges, strt, stp, FB_report_dir, save_badg
 #####################   Functions for network metrics and visualization
 ###############################################################################################
 
-prep_net_data <- function(df, net_format) {
-  
+prep_net_data <- function(df) {
+
   # This funciton takes an RTLS df and creates files for:
   #   Edges
   #   Nodes
-  nodes <- df %>% 
+  nodes <- df %>%
     group_by(Receiver) %>%
     summarize(duration = sum(Duration)) %>%
     ungroup() %>%
@@ -254,13 +254,14 @@ prep_net_data <- function(df, net_format) {
     ) %>%
     rename(rec_num = Receiver,
            type = Receiver_recode,
-           description = Receiver_name)
-  
+           description = Receiver_name) %>%
+    arrange(desc(duration))
+
   #adding back
   distinct(df,Receiver,Receiver_recode)
-  
+
   df <- relabel_nodes(df,nodes) # this just recodes the reciever id to the 'id' var from above; why is that so hard in R?
-  
+
   edges <- df %>%
     arrange(Time_In) %>% # makes sure rows are ordered in ascending time order
     mutate(to = lead(Receiver)) %>% # creates new colum for destination link based on shifted Receiver column
@@ -269,6 +270,6 @@ prep_net_data <- function(df, net_format) {
     group_by(from, to) %>%
     summarize(weight = n()) %>%
     ungroup()
-  
+
   return(list('nodes' = nodes, 'edges' = edges))
 }

@@ -4,9 +4,9 @@
 /Output/
 
 **/.DS_Store
-**/.docx
-**/.csv
-**/.xlsx
+*.docx
+*.csv
+*.xlsx
 
 # Virtual environment
 /python3/
