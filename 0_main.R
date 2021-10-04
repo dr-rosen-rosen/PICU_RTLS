@@ -19,15 +19,37 @@ Sys.setenv(R_CONFIG_ACTIVE = "pilot_study_RTLS_030819_db") # 'default')#
 config <- config::get()
 Sys.setenv(RETICULATE_PYTHON = config$py_version)
 reticulate::source_python('1_funcs.py')
+reticulate::source_python('1_funcs_pg.py')
 source(here('1_funcs.R'), echo = TRUE)
 source(here('2a_connect.R'), echo = TRUE)
 
 ########## Loads in automated csv files
-csv_to_db(
-  db_name = config$db_name,
-  db_loc = config$db_loc,
-  in_path = config$in_path
-  )
+########## OLD SQLITE VERSION
+# csv_to_db(
+#   db_name = config$db_name,
+#   db_loc = config$db_loc,
+#   in_path = config$in_path
+#   )
+
+######### Automated data flow from email to postgres
+
+get_files_from_outlk(
+  outlk_sess = Microsoft365R::get_business_outlook()
+)
+
+csv_to_db_pg(
+  tmp_csv_path = config$tmp_csv_path, 
+  archive_csv_path = config$archive_csv_path,
+  db_u = config$db_u, 
+  db_pw = config$db_pw)
+
+get_weekly_report_pg(
+  anchor_date = lubridate::today(),
+  look_back_days = 8,
+  db_u = config$db_u,
+  db_pw = config$db_pw,
+  target_badges = get_active_badges(config$badge_file),
+  weekly_report_dir = config$weekly_report_dir)
 
 ########## Updates receiver location codes
 rcvr_dscrp_to_loc_code(
@@ -65,7 +87,11 @@ x <- get_weekly_report(
   weekly_report_dir = config$weekly_report_dir
   )
 
-
+test <- get_active_badges(config$badge_file)
+audit_active_badges(
+  con = con,
+  active_badges = get_active_badges(config$badge_file)
+)
 create_FB_reports(
   target_badges = get_active_badges(config$badge_file),
   strt = config$FB_report_start,
@@ -76,12 +102,10 @@ create_FB_reports(
 
 # load some badge data
 x <- get_RTLS_data(
-  badges = '522400',  #get_active_badges(config$badge_file),#'all',#badges,
-  strt = config$FB_report_start,#ymd_hms("2019-07-28"),#config$FB_report_start,#'all',#strt,
-  stp = config$FB_report_stop #config$FB_report_stop#'all'#stp
+  badges = '460295',  #get_active_badges(config$badge_file),#'all',#badges,
+  strt = ymd("2021-09-20"),#config$FB_report_start,,#config$FB_report_start,#'all',#strt,
+  stp = ymd("2021-09-22") #config$FB_report_stop #config$FB_report_stop#'all'#stp
   )
-
-
 
 # code into location categories
 y <- loc_code_badge_data(

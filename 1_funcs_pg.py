@@ -5,10 +5,11 @@
 ####################################################################################################
 ####################################################################################################
 
-from sqlalchemy import (UniqueConstraint,MetaData,Table,Column,Integer,Numeric,Float,Boolean,String,DateTime,ForeignKey,create_engine,select,update,delete,insert,and_,inspect)
-from sqlalchemy_utils.functions import create_database
-from sqlalchemy import inspect
-from sqlalchemy import func
+# from sqlalchemy import (UniqueConstraint,MetaData,Table,Column,Integer,Numeric,Float,Boolean,String,DateTime,ForeignKey,create_engine,select,update,delete,insert,and_,inspect)
+# from sqlalchemy_utils.functions import create_database
+# from sqlalchemy import inspect
+# from sqlalchemy import func
+import sqlalchemy as sa
 import os
 from datetime import datetime
 import sys
@@ -17,6 +18,8 @@ import pandas as pd
 from contextlib import closing
 from multiprocessing import (Pool,cpu_count)
 import numpy as np
+from pathlib import Path
+import shutil
 
 ####################################################################################################
 ############################## Legacy RTLS_scripts.py
@@ -54,8 +57,8 @@ def pullRTLS(rng,RTLS_data,connection,select,datetime,timedelta,and_,pd):
         return df.drop_duplicates(subset=None, keep='first', inplace=False)
 
 #Pulls all recievers from table
-def pullReceivers(RTLS_Receivers,connection,select,pd):
-    s = select([RTLS_Receivers])
+def pullReceivers(RTLS_Receivers,connection):
+    s = sa.select([RTLS_Receivers])
     rp = connection.execute(s)
     receivers = pd.DataFrame(rp.fetchall())
     receivers.columns = rp.keys()
@@ -63,26 +66,26 @@ def pullReceivers(RTLS_Receivers,connection,select,pd):
     return receivers
 
 # Inserts new recievers into the receivers table
-def updateRTLSReceivers(receivers,RTLS_Receivers,connection,insert,select):
+def updateRTLSReceivers(receivers,RTLS_Receivers,connection):
     for i,row in receivers.iterrows():
-        exists = connection.execute(select([RTLS_Receivers.c.Receiver]).where(RTLS_Receivers.c.Receiver == row.Receiver)).scalar()
+        exists = connection.execute(sa.select([RTLS_Receivers.c.Receiver]).where(RTLS_Receivers.c.Receiver == row.Receiver)).scalar()
         if not exists:
             ins_vals = {
                 'Receiver':row.Receiver,
                 'ReceiverName':row.ReceiverName
             }
-            ins = insert(RTLS_Receivers).values(ins_vals)
+            ins = sa.insert(RTLS_Receivers).values(ins_vals)
             connection.execute(ins)
     return
 
 # puts new hits, checking for duplicates, in db
-def storeRTLS(hits,RTLS_data,connection,insert,select,and_):
+def storeRTLS(hits,RTLS_data,connection):
     for i,row in hits.iterrows():
-        cond = and_(
+        cond = sa.and_(
         RTLS_data.c.Receiver == row.Receiver,
         RTLS_data.c.Time_In == row.Time_In,
         RTLS_data.c.Time_Out == row.Time_Out)
-        exists = connection.execute(select([RTLS_data]).where(cond)).scalar()
+        exists = connection.execute(sa.select([RTLS_data]).where(cond)).scalar()
         if not exists:
             ins_vals = {
                 'Receiver':row.Receiver,
@@ -90,7 +93,7 @@ def storeRTLS(hits,RTLS_data,connection,insert,select,and_):
                 'Time_Out':row.Time_Out
             }
             #print ins_vals
-            ins = insert(RTLS_data).values(ins_vals)
+            ins = sa.insert(RTLS_data).values(ins_vals)
             connection.execute(ins)
         else:
             print('Dupe!')
@@ -148,46 +151,49 @@ def RTLS_loc_recode(x):
 ####################################################################################################
 ############################## Runs reports
 ####################################################################################################
+
 def get_active_badges(badge_file):
     b = pd.read_excel(badge_file,index_col=None,header=0)
     b = b[b.Active == 'Yes']
     return b.RTLS_ID.unique()
 
 # new func for generating report
-def get_weekly_report(anchor_date,look_back_days,db_name,db_loc,target_badges,weekly_report_dir):
+def get_weekly_report_pg(anchor_date,look_back_days,db_u,db_pw,target_badges,weekly_report_dir):
     # set date variables
     rght_win = anchor_date
     lft_win = rght_win - pd.Timedelta(look_back_days, unit='D')
 
     print('This many active badges... '+str(len(target_badges)))
-
-    # make connection and get data
-    engine = create_engine('sqlite:///'+db_loc+db_name)#os.path.join('sqlite:///',db_loc,db_name))
-    metadata = MetaData(bind=engine)
-    metadata.reflect()
-    connection = engine.connect()
-    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-    insp = inspect(engine)
-
     #for each target badge, get data within ragne!
     df_list = []
     target_badges = [int(b) for b in target_badges]
-    for t in target_badges:#tables:
-        print(t)
-        if insp.has_table(str('Table_'+str(t))):
-            tbl = metadata.tables[str('Table_'+str(t))]
-            s = select([tbl]).where(and_(tbl.c.Time_In >= lft_win,tbl.c.Time_In <= rght_win))
-            #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
-            rp = connection.execute(s)
-            df = pd.DataFrame(rp.fetchall())
-            if df.empty:
-                print("Empty badge... "+str(t))
-            else:
-                print(len(df))
-                df.columns = rp.keys()
-                df['RTLS_ID'] = t
-                df_list.append(df)
-        else: print("no table")#pass
+    sites = ['jhh','bmc']
+    for site in sites:
+        # make connection and get data
+        df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
+        engine = create_engine(df_string)
+        metadata = MetaData(bind=engine)
+        metadata.reflect()
+        connection = engine.connect()
+        connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+        insp = inspect(engine)
+
+        for t in target_badges:#tables:
+            print(t)
+            if insp.has_table(str('Table_'+str(t))):
+                tbl = metadata.tables[str('Table_'+str(t))]
+                s = select([tbl]).where(and_(tbl.c.Time_In >= lft_win,tbl.c.Time_In <= rght_win))
+                #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
+                rp = connection.execute(s)
+                df = pd.DataFrame(rp.fetchall())
+                if df.empty:
+                    print("Empty badge... "+str(t))
+                else:
+                    print(len(df))
+                    df.columns = rp.keys()
+                    df['RTLS_ID'] = t
+                    df_list.append(df)
+            else: print("no table")#pass
     df = pd.concat(df_list)
 
     df['Duration'] = (df.Time_Out - df.Time_In).astype('timedelta64[s]')/60
@@ -204,63 +210,70 @@ def get_weekly_report(anchor_date,look_back_days,db_name,db_loc,target_badges,we
 ############################## Reads in files and stores them in database
 ####################################################################################################
 
-def csv_to_db(db_name, db_loc, in_path):
-    # Creates connection to db and loads appropriate scripts
-    engine = create_engine('sqlite:///'+db_loc+db_name)
-    #if not engine.dialect.has_table(engine, 'RTLS_Receivers'):
-    if not inspect(engine).has_table('RTLS_Receivers'):
-        #%run '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/scripts/RTLS_DB_defs.py'
-        metadata = MetaData(bind=db) # Should this be engine instead of DB? If so, move out of loop and remove dupe below
-        RTLS_Receivers = Table('RTLS_Receivers',metadata,
-                Column('Receiver',Integer(),primary_key=True,unique=True),
-                Column('ReceiverName',String(255)),
-                Column('LocationCode',String(255))
-        )
-        metadata.create_all(engine)
-    else:
-        metadata = MetaData(bind=engine)
-        metadata.reflect()
-        RTLS_Receivers = metadata.tables['RTLS_Receivers']
-    connection = engine.connect()
-    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-    #%run '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/scripts/RTLS_scripts.py'
+#### TO DOS
+# 1. create the tmp and arhcive paths, but them in the config file
+# 2. check the postgres user account and make sure connection works (left out DBAPI)
+# 3. give it all a shot!!!
+# 0. Make table names and var names lower case with _
 
-    # Reads in all the csvs
-    RTLS_dump = pd.concat([pd.read_csv(f,header=0,skiprows=[0,2], index_col=None,sep=',',encoding='utf-16',parse_dates=[6,7],infer_datetime_format=True) for f in glob.glob(os.path.join(in_path, '*.csv'))])
-    #RTLS_dump = pd.concat([pd.read_excel(f,header=0,skiprows=[1], index_col=None,parse_dates=[6,7]) for f in glob.glob(os.path.join(in_path, '*.xlsx'))])
-    updateRTLSReceivers(RTLS_dump[['Receiver','ReceiverName']].drop_duplicates(inplace=False),RTLS_Receivers,connection,insert,select)
-
-    RTLS_dump.dropna(axis='index',how='any',inplace=True)
-    RTLS_dump['BadgeTimeIn'] = pd.to_datetime(RTLS_dump['BadgeTimeIn'])#,errors='coerce')
-    RTLS_dump['BadgeTimeOut'] = pd.to_datetime(RTLS_dump['BadgeTimeOut'])
-    hit_cols = ['Badge','Receiver','BadgeTimeIn','BadgeTimeOut']
-    hit_col_remap = ['RTLS_ID','Receiver','Time_In','Time_Out']
-    hits = RTLS_dump[hit_cols].copy()
-    hits.columns = hit_col_remap
-    hits['Receiver'] = hits['Receiver'].astype('int')
-    hits.drop_duplicates(subset=None, keep='first', inplace=True)
-
-    for badge in hits.RTLS_ID.unique():
-
-        Table_name = 'Table_'+str(badge)
-
-        # check if badge table exists, and create if it doesn't
-        #if not engine.dialect.has_table(engine, Table_name):
-        if not inspect(engine).has_table(Table_name):
-            metadata = MetaData(engine)
-            # Create a table with the appropriate Columns
-            RTLS_Data = Table(Table_name, metadata,
-                Column('Receiver',Integer, nullable=False), #ForeignKey('RTLS_Receivers.Receiver')), #FOREIGN KEY?
-                Column('Time_In',DateTime()),
-                Column('Time_Out',DateTime()))
-                # Implement the creation
-            metadata.create_all()
+def csv_to_db_pg(tmp_csv_path, archive_csv_path,db_u, db_pw):
+    sites = ['jhh','bmc']
+    for site in sites:
+        # Creates connection to db and loads appropriate scripts
+        df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
+        engine = sa.create_engine(df_string)
+        if not sa.inspect(engine).has_table('RTLS_Receivers'):
+            metadata = sa.MetaData(bind=engine) # Should this be engine instead of DB? If so, move out of loop and remove dupe below
+            RTLS_Receivers = sa.Table('RTLS_Receivers',metadata,
+                    Column('Receiver',Integer(),primary_key=True,unique=True),
+                    Column('ReceiverName',String(255)),
+                    Column('LocationCode',String(255))
+            )
+            metadata.create_all(engine)
         else:
-            metadata = MetaData(bind=engine)
+            metadata = sa.MetaData(bind=engine)
             metadata.reflect()
-            RTLS_Data = metadata.tables[Table_name]
-        badge_hits = hits[hits.RTLS_ID ==  badge].copy().drop('RTLS_ID',axis=1) # Send just the data for that badge
-        storeRTLS(badge_hits,RTLS_Data,connection,insert,select,and_)
+            RTLS_Receivers = metadata.tables['RTLS_Receivers']
+        connection = engine.connect()
+        connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+
+        # Reads in all the csvs for a given site
+        f_pattern = 'rtls_'+site+'*.csv'
+        files = glob.glob(os.path.join(tmp_csv_path, f_pattern))
+        print(len(files))
+        RTLS_dump = pd.concat([pd.read_csv(f,header=0,skiprows=[0,2], index_col=None,sep=',',encoding='utf-16',parse_dates=[6,7],infer_datetime_format=True) for f in files])
+        updateRTLSReceivers(RTLS_dump[['Receiver','ReceiverName']].drop_duplicates(inplace=False),RTLS_Receivers,connection)
+
+        RTLS_dump.dropna(axis='index',how='any',inplace=True)
+        RTLS_dump['BadgeTimeIn'] = pd.to_datetime(RTLS_dump['BadgeTimeIn'])
+        RTLS_dump['BadgeTimeOut'] = pd.to_datetime(RTLS_dump['BadgeTimeOut'])
+        hit_cols = ['Badge','Receiver','BadgeTimeIn','BadgeTimeOut']
+        hit_col_remap = ['RTLS_ID','Receiver','Time_In','Time_Out']
+        hits = RTLS_dump[hit_cols].copy()
+        hits.columns = hit_col_remap
+        hits['Receiver'] = hits['Receiver'].astype('int')
+        hits.drop_duplicates(subset=None, keep='first', inplace=True)
+
+        for badge in hits.RTLS_ID.unique():
+            Table_name = 'Table_'+str(badge)
+            # check if badge table exists, and create if it doesn't
+            if not sa.inspect(engine).has_table(Table_name):
+                metadata = sa.MetaData(engine)
+                # Create a table with the appropriate Columns
+                RTLS_Data = sa.Table(Table_name, metadata,
+                    Column('Receiver',Integer, nullable=False),
+                    Column('Time_In',DateTime()),
+                    Column('Time_Out',DateTime()))
+                metadata.create_all()
+            else:
+                metadata = sa.MetaData(bind=engine)
+                metadata.reflect()
+                RTLS_Data = metadata.tables[Table_name]
+            badge_hits = hits[hits.RTLS_ID ==  badge].copy().drop('RTLS_ID',axis=1) # Send just the data for that badge
+            storeRTLS(badge_hits,RTLS_Data,connection)
+    # Move all files from the tmp to archive directories
+    for src_file in os.listdir(tmp_csv_path):
+        shutil.move(os.path.join(tmp_csv_path,src_file), os.path.join(archive_csv_path,src_file))
 ####################################################################################################
 ############################## Looks at all recievers in db, and adds location code for those with none
 ####################################################################################################
@@ -269,14 +282,14 @@ def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file,rcvr_recode_file_loc
     #### codes and updates the reciever table.
 
     # connect to db
-    engine = create_engine('sqlite:///'+db_loc+db_name)#os.path.join('sqlite:///',db_loc,db_name))
-    metadata = MetaData(bind=engine)
+    engine = sa.create_engine('sqlite:///'+db_loc+db_name)#os.path.join('sqlite:///',db_loc,db_name))
+    metadata = sa.MetaData(bind=engine)
     metadata.reflect()
     RTLS_Receivers = metadata.tables['RTLS_Receivers']
     connection = engine.connect()
     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
     # # get all recievers w/o a location code
-    rp = connection.execute(select([RTLS_Receivers]).where(RTLS_Receivers.c.LocationCode.is_(None)))
+    rp = connection.execute(sa.select([RTLS_Receivers]).where(RTLS_Receivers.c.LocationCode.is_(None)))
     receivers = pd.DataFrame(rp.fetchall())
     if receivers.empty:
         print('All receivers have been coded already!!')
@@ -331,7 +344,7 @@ def rcvr_dscrp_to_loc_code(db_name, db_loc,rcvr_recode_file,rcvr_recode_file_loc
         if print_new_recievers: receivers.to_csv('new_recievers_runOn{}.csv'.format(datetime.date(datetime.now())))
         # Saves the locations back to DB
         for i, row in receivers.iterrows():
-            stmt = update(RTLS_Receivers).where(RTLS_Receivers.c.Receiver == row.Receiver).values(LocationCode = row.ReceiverDescription_IMRes)
+            stmt = sa.update(RTLS_Receivers).where(RTLS_Receivers.c.Receiver == row.Receiver).values(LocationCode = row.ReceiverDescription_IMRes)
             connection.execute(stmt)
 
 ####################################################################################################
@@ -363,15 +376,15 @@ def loc_code_badge_data(badge_data, db_name, db_loc):
     #### This recodes a set of worn badges using reciever recodes stored in reciever tables
     ####
     # connect to db
-    engine = create_engine('sqlite:///'+db_loc+db_name)
-    metadata = MetaData(bind=engine)
+    engine = sa.create_engine('sqlite:///'+db_loc+db_name)
+    metadata = sa.MetaData(bind=engine)
     metadata.reflect()
     RTLS_Receivers = metadata.tables['RTLS_Receivers']
     connection = engine.connect()
     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
 
     # get all recievers w/o a location code
-    rp = connection.execute(select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
+    rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
     receivers = pd.DataFrame(rp.fetchall())
     if receivers.empty:
         print('Problem mapping recievers to badge data.')
