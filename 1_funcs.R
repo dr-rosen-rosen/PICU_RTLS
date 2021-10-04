@@ -11,6 +11,8 @@ library(hrbrthemes)
 library(officer)
 library(DBI)
 library(network)
+library(here)
+library(Micrsoft365R)
 ###############################################################################################
 #####################   Pulls data for specific badges and time range
 ###############################################################################################
@@ -272,4 +274,52 @@ prep_net_data <- function(df) {
     ungroup()
 
   return(list('nodes' = nodes, 'edges' = edges))
+}
+
+###############################################################################################
+#####################   Functions for automating data upload from email
+###############################################################################################
+
+get_files_from_outlk <- function(outlk_sess) {
+  # Go to the folder for RTLS data
+  folder <- outlk_sess$get_folder('RTLS_Data')
+  tst_list <- folder$list_emails(n=10)
+
+  for (em in tst_list) {
+    # Check source of data
+    if (grepl("BMC_RTLS-Reports",em$properties$sender$emailAddress$name, fixed = TRUE)) {
+      print('Bayview')
+      site <- "bmc"
+    } else if (grepl("RTLSDB-Alerts", em$properties$sender$emailAddress$name, fixed = TRUE)) {
+      print('jhh')
+      site <- "jhh"
+    } else if (grepl("Versus Reports", em$properties$sender$emailAddress$name, fixed = TRUE)) {
+      site <- "battery"
+      print(site)
+    } else {
+      site <- NA
+      print('huh?')
+    }
+
+    #test file type
+    if (grepl('.csv',em$list_attachments()[[1]]$properties$name,fixed = TRUE)){
+      print('csv')
+      kind <- '.csv'
+      #em$list_attachments()[[1]]$download(dest = here('test.csv'),overwrite = TRUE)
+    } else if (grepl('.pdf',em$list_attachments()[[1]]$properties$name,fixed = TRUE)){
+      print('pdf')
+      kind <- '.pdf'
+    } else {
+      kind <- NA
+    }
+
+    if (!is.na(site) & !is.na(kind)) {
+      # Download attachemnt
+      f <- paste0('rtls_',site,'_',lubridate::date(em$properties$sentDateTime),kind)
+      em$list_attachments()[[1]]$download(dest = here('Data/RTLS_Data/tmp',f),overwrite = TRUE)
+      # move email to archive folder
+      em$move(dest = outlk_sess$get_folder('RTLS_archive'))
+    }
+  }
+  NULL
 }
