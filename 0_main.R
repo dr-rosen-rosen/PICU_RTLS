@@ -21,7 +21,7 @@ Sys.setenv(RETICULATE_PYTHON = config$py_version)
 reticulate::source_python('1_funcs.py')
 reticulate::source_python('1_funcs_pg.py')
 source(here('1_funcs.R'), echo = TRUE)
-source(here('2a_connect.R'), echo = TRUE)
+#source(here('2a_connect.R'), echo = TRUE)
 
 ########## Loads in automated csv files
 ########## OLD SQLITE VERSION
@@ -51,6 +51,9 @@ get_weekly_report_pg(
   target_badges = get_active_badges(config$badge_file),
   weekly_report_dir = config$weekly_report_dir)
 
+
+
+
 ########## Updates receiver location codes
 rcvr_dscrp_to_loc_code(
   db_name = config$db_name,
@@ -61,9 +64,45 @@ rcvr_dscrp_to_loc_code(
   )
 
 ########## Manul review and update of locations in table
-rec_df <- get_receiver_loc_data(
-  con = con
+# returns overlap between receiver id's at jhh and bmc
+x <- check_receiver_overlap()
+#takes location codes from old DB and pushes to pg
+migrate_location_codes(
+  pg_con = get_connection(
+    db_name = paste0('rtls_','jhh'),
+    db_u = config$db_u,
+    db_pw = config$db_pw),
+  sqlite_con = get_sqlite_con(
+    db_loc = config$db_loc,
+    db_name = config$db_name
+  )
 )
+jhh <- get_receiver_loc_data(
+  con = get_connection(
+    db_name = paste0('rtls_','jhh'),
+    db_u = config$db_u,
+    db_pw = config$db_pw),
+  t_name = 'rtls_receivers')
+
+old_loc_codes <- get_receiver_loc_data(
+  con = get_sqlite_con(
+    db_loc = config$db_loc,
+    db_name = config$db_name
+  ),
+  t_name = 'RTLS_Receivers'
+)
+sqlite_con <- get_sqlite_con(
+  db_loc = config$db_loc,
+  db_name = config$db_name
+)
+
+get_receiver_loc_data(
+  con = get_connection(
+    db_name = paste0('rtls_','bmc'),
+    db_u = config$db_u,
+    db_pw = config$db_pw)) #%>%
+  #select(Receiver) %>% unique(.)
+
 write_csv(rec_df, path = 'receiver_recode.csv')
 df <- read.csv('receiver_recode_reviewed.csv')
 manual_receiver_update(df = df, con = con)

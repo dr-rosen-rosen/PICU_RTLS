@@ -12,7 +12,70 @@ library(officer)
 library(DBI)
 library(network)
 library(here)
-library(Micrsoft365R)
+library(Microsoft365R)
+
+####################################################################################################
+############################## DB connection (pg) and management
+####################################################################################################
+
+get_connection <- function(db_name, db_u, db_pw){
+    con <- DBI::dbConnect(RPostgres::Postgres(),
+                           dbname   = db_name,
+                           host     = 'localhost',
+                           port     = 5433,
+                           user     = db_u,
+                           password = db_pw)
+    return(con)
+}
+
+get_sqlite_con <- function(db_loc, db_name){
+    prgdir <- getwd()
+    setwd(db_loc)
+    # connect to RTSL database
+    con <- DBI::dbConnect(RSQLite::SQLite(), dbname = db_name)
+    setwd(prgdir)
+    return(con)
+}
+
+check_receiver_overlap <- function(){
+    jhh <- get_receiver_loc_data(
+        con = get_connection(
+        db_name = paste0('rtls_','jhh'),
+        db_u = config$db_u,
+        db_pw = config$db_pw),
+        t_name = 'rtls_receivers')
+    bmc <- get_receiver_loc_data(
+        con = get_connection(
+        db_name = paste0('rtls_','bmc'),
+        db_u = config$db_u,
+        db_pw = config$db_pw),
+        t_name = 'rtls_receivers')
+    old_jhh <- get_receiver_loc_data(
+        con = get_sqlite_con(
+        db_loc = config$db_loc,
+        db_name = config$db_name),
+        t_name = 'rtls_receivers')
+    pg_jhh_bmc <- intersect(
+        unique(jhh$receiver),
+        unique(bmc$receiver)
+    )
+    old_new_jhh <- setdiff(
+        unique(old_jhh$Receiver),
+        unique(jhh$receiver)
+    )
+    return(list(pg_jhh_bmc_overlap = pg_jhh_bmc, old_not_in_new_jhh = old_new_jhh))
+}
+
+migrate_location_codes <- function(pg_con, sqlite_con){
+    old_loc_codes <- get_receiver_loc_data(
+        con = sqlite_con,
+        t_name = 'RTLS_Receivers'
+    )
+    manual_receiver_update(
+        df = old_loc_codes,
+        con = pg_con
+    )
+}
 ###############################################################################################
 #####################   Pulls data for specific badges and time range
 ###############################################################################################
@@ -52,18 +115,18 @@ get_RTLS_data <- function(badges, strt, stp) {
 }
 
 # pulls all reciever location data... used for manual review and update
-get_receiver_loc_data <- function(con) {
+get_receiver_loc_data <- function(con, t_name) {
   receiver_data <- con %>%
-    tbl('RTLS_Receivers') %>%
+    tbl(t_name) %>%
     collect()
   return(receiver_data)
 }
 
 manual_receiver_update <- function(df, con) {
   for (i in rownames(df)) {
-    update_stmt <- paste("update RTLS_Receivers",
-                       "set LocationCode =",paste0('\"',df[i,'LocationCode'],'\"'),
-                       "where Receiver = ",df[i,"Receiver"])
+    update_stmt <- paste("update rtls_receivers",
+                       "set location_code =",paste0('\'',df[i,'LocationCode'],'\''),
+                       "where receiver = ",df[i,"Receiver"])
     print(update_stmt)
     DBI::dbSendQuery(con, update_stmt)
     }
