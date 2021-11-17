@@ -402,6 +402,69 @@ def loc_code_badge_data(badge_data, db_name, db_loc):
             num_processes = 4
             )
         return df_loc_coded
+
+def loc_code_badge_data_ppg(badge_data, db_u, db_pw,site):
+    #### This recodes a set of worn badges using reciever recodes stored in reciever tables
+    ####
+    # connect to db
+    df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
+    engine = sa.create_engine(df_string)
+    metadata.reflect()
+    RTLS_Receivers = metadata.tables['RTLS_Receivers']
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+
+    # get all recievers w/o a location code
+    rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
+    receivers = pd.DataFrame(rp.fetchall())
+    if receivers.empty:
+        print('Problem mapping recievers to badge data.')
+        return None
+    else:
+        receivers.columns = rp.keys()
+        receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
+        receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
+        num_processes = 4
+        df_loc_coded = locRecode_parallel_izer(
+            func = locRecode_izer,
+            badge_data = badge_data,
+            receiver_dict = receiver_dict,
+            receiverName_dict = receiverName_dict,
+            num_processes = 4
+            )
+        return df_loc_coded
+
+def loc_code_badge_data_pg(badge_data, db_u, db_pw, site):
+    #### This recodes a set of worn badges using reciever recodes stored in reciever tables
+    ####
+    # connect to db
+    df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
+    engine = sa.create_engine(df_string)
+    metadata = sa.MetaData(bind=engine)
+    metadata.reflect()
+    RTLS_Receivers = metadata.tables['RTLS_Receivers']
+    connection = engine.connect()
+    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+
+    # get all recievers w/o a location code
+    rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
+    receivers = pd.DataFrame(rp.fetchall())
+    if receivers.empty:
+        print('Problem mapping recievers to badge data.')
+        return None
+    else:
+        receivers.columns = rp.keys()
+        receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
+        receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
+        num_processes = 4
+        df_loc_coded = locRecode_parallel_izer(
+            func = locRecode_izer,
+            badge_data = badge_data,
+            receiver_dict = receiver_dict,
+            receiverName_dict = receiverName_dict,
+            num_processes = 4
+            )
+        return df_loc_coded
 ####################################################################################################
 ############################## Applies data cleaning rules to recategorized data
 ####################################################################################################

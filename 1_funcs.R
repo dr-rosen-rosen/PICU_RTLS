@@ -80,7 +80,7 @@ migrate_location_codes <- function(pg_con, sqlite_con){
 #####################   Pulls data for specific badges and time range
 ###############################################################################################
 
-get_RTLS_data <- function(badges, strt, stp) {
+get_RTLS_data <- function(badges, strt, stp, con) {
   # set up empty dataframe to store
   print("Pulling RTLS data...")
   all_data <- data.frame(
@@ -124,11 +124,12 @@ get_receiver_loc_data <- function(con, t_name) {
 
 manual_receiver_update <- function(df, con) {
   for (i in rownames(df)) {
-    update_stmt <- paste("update rtls_receivers",
-                       "set location_code =",paste0('\'',df[i,'LocationCode'],'\''),
-                       "where receiver = ",df[i,"Receiver"])
+    update_stmt <- paste0("UPDATE RTLS_Receivers ",
+                       "SET LocationCode = ",paste0('\'',df[i,'LocationCode'],'\''),
+                       " WHERE Receiver = ",df[i,"Receiver"],";")
     print(update_stmt)
-    DBI::dbSendQuery(con, update_stmt)
+    res <- DBI::dbSendQuery(con, update_stmt)
+    DBI::dbClearResult(res)
     }
 }
 ###############################################################################################

@@ -69,7 +69,7 @@ x <- check_receiver_overlap()
 #takes location codes from old DB and pushes to pg
 migrate_location_codes(
   pg_con = get_connection(
-    db_name = paste0('rtls_','jhh'),
+    db_name = paste0('rtls_','bmc'),
     db_u = config$db_u,
     db_pw = config$db_pw),
   sqlite_con = get_sqlite_con(
@@ -77,9 +77,9 @@ migrate_location_codes(
     db_name = config$db_name
   )
 )
-jhh <- get_receiver_loc_data(
+bmc <- get_receiver_loc_data(
   con = get_connection(
-    db_name = paste0('rtls_','jhh'),
+    db_name = paste0('rtls_','bmc'),
     db_u = config$db_u,
     db_pw = config$db_pw),
   t_name = 'rtls_receivers')
@@ -100,11 +100,12 @@ get_receiver_loc_data(
   con = get_connection(
     db_name = paste0('rtls_','bmc'),
     db_u = config$db_u,
-    db_pw = config$db_pw)) #%>%
+    db_pw = config$db_pw),
+  t_name = 'RTLS_Receivers') #%>%
   #select(Receiver) %>% unique(.)
 
-write_csv(rec_df, path = 'receiver_recode.csv')
-df <- read.csv('receiver_recode_reviewed.csv')
+write_csv(bmc, file = 'bmc_receiver_recode.csv')
+#df <- read.csv('receiver_recode_reviewed.csv')
 manual_receiver_update(df = df, con = con)
 
 
@@ -141,16 +142,21 @@ create_FB_reports(
 
 # load some badge data
 x <- get_RTLS_data(
-  badges = '460295',  #get_active_badges(config$badge_file),#'all',#badges,
-  strt = ymd("2021-09-20"),#config$FB_report_start,,#config$FB_report_start,#'all',#strt,
-  stp = ymd("2021-09-22") #config$FB_report_stop #config$FB_report_stop#'all'#stp
+  badges = '526896',  #get_active_badges(config$badge_file),#'all',#badges,
+  strt = ymd("2021-10-20"),#config$FB_report_start,,#config$FB_report_start,#'all',#strt,
+  stp = ymd("2021-10-22"), #config$FB_report_stop #config$FB_report_stop#'all'#stp
+  con = get_connection(
+    db_name = paste0('rtls_','bmc'),
+    db_u = config$db_u,
+    db_pw = config$db_pw)
   )
 
 # code into location categories
-y <- loc_code_badge_data(
+y <- loc_code_badge_data_pg(
   badge_data = x,
-  db_name = config$db_name,
-  db_loc = config$db_loc
+  db_u = config$db_u,
+  db_pw = config$db_pw,
+  site = 'bmc'
   )
 # apply data cleaning rules
 z <- apply_rules(
