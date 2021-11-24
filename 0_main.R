@@ -45,13 +45,28 @@ csv_to_db_pg(
 
 get_weekly_report_pg(
   anchor_date = lubridate::today(),
-  look_back_days = 8,
+  look_back_days = 9,
   db_u = config$db_u,
   db_pw = config$db_pw,
   target_badges = get_active_badges(config$badge_file),
   weekly_report_dir = config$weekly_report_dir)
 
+data_for_fb_df <- get_and_locCode_RTLS_data_pg(
+  badges = get_active_badges(config$badge_file), 
+  strt = lubridate::ymd('2021-11-7'), 
+  stp = lubridate::ymd('2021-11-22'), 
+  sites = c('jhh'),
+  use_rules = TRUE
+)
+nrow(data_for_fb_df)
 
+create_FB_reports(
+  df = data_for_fb_df,
+  FB_report_dir = config$FB_report_dir,
+  save_badge_timeline = FALSE
+)
+
+make_overall_bar(df = data_for_fb_df, badge = 524787)
 
 
 ########## Updates receiver location codes
@@ -69,7 +84,7 @@ x <- check_receiver_overlap()
 #takes location codes from old DB and pushes to pg
 migrate_location_codes(
   pg_con = get_connection(
-    db_name = paste0('rtls_','bmc'),
+    db_name = paste0('rtls_','jhh'),
     db_u = config$db_u,
     db_pw = config$db_pw),
   sqlite_con = get_sqlite_con(
@@ -98,7 +113,7 @@ sqlite_con <- get_sqlite_con(
 
 get_receiver_loc_data(
   con = get_connection(
-    db_name = paste0('rtls_','bmc'),
+    db_name = paste0('rtls_','jhh'),
     db_u = config$db_u,
     db_pw = config$db_pw),
   t_name = 'RTLS_Receivers') #%>%
@@ -132,13 +147,13 @@ audit_active_badges(
   con = con,
   active_badges = get_active_badges(config$badge_file)
 )
-create_FB_reports(
-  target_badges = get_active_badges(config$badge_file),
-  strt = config$FB_report_start,
-  stp = config$FB_report_stop,
-  FB_report_dir = config$FB_report_dir,
-  save_badge_timeline = FALSE
-)
+# create_FB_reports(
+#   target_badges = get_active_badges(config$badge_file),
+#   strt = config$FB_report_start,
+#   stp = config$FB_report_stop,
+#   FB_report_dir = config$FB_report_dir,
+#   save_badge_timeline = FALSE
+# )
 
 # load some badge data
 x <- get_RTLS_data(
@@ -238,3 +253,47 @@ zzz_par <- make_timeseries_df_PAR(
 #   do.call(cbind, lapply(x, is.nan))
 # test2[is.nan(test2)] <- NA
 # loc_seq <- TraMineR::seqdef(test,id='auto')
+
+
+
+################################################################
+################################################################
+############ Scipts for cleaning up table and column names
+############
+################################################################
+################################################################
+
+con <- get_connection(
+  db_name = paste0('rtls_','jhh'),
+  db_u = config$db_u,
+  db_pw = config$db_pw)
+tables <- dbListTables(con)
+tables <- tables[tables != 'rtls_receivers']
+tables <- tables[tables != 'RTLS_Receivers']
+for (t in tables) {
+  print(t)
+  if (startsWith(t,"T")) {
+    update_stmt <- paste0("ALTER TABLE IF EXISTS \"",t,"\" RENAME TO ",tolower(t),";")
+    print(stmt)
+    res <- DBI::dbExecute(con, update_stmt)
+    print(res)
+  }
+}
+
+for (t in tables) {
+  print(t)
+  if (startsWith(t,"table_")) {
+    update_stmt <- paste0("ALTER TABLE IF EXISTS ",t," RENAME COLUMN \"Receiver\" TO receiver;")
+    print(stmt)
+    res <- DBI::dbExecute(con, update_stmt)
+    print(res)
+    update_stmt <- paste0("ALTER TABLE IF EXISTS ",t," RENAME COLUMN \"Time_In\" TO time_in;")
+    print(stmt)
+    res <- DBI::dbExecute(con, update_stmt)
+    print(res)
+    update_stmt <- paste0("ALTER TABLE IF EXISTS ",t," RENAME COLUMN \"Time_Out\" TO time_out;")
+    print(stmt)
+    res <- DBI::dbExecute(con, update_stmt)
+    print(res)
+  }
+}

@@ -42,8 +42,8 @@ def pullRTLS(rng,RTLS_data,connection,select,datetime,timedelta,and_,pd):
     # Pull RLTS hits in time range
     print(end)
     print(start)
-    s = select([RTLS_data]).where(and_(RTLS_data.c.Time_In >= start,RTLS_data.c.Time_In <= end))
-    #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
+    s = select([RTLS_data]).where(and_(RTLS_data.c.time_in >= start,RTLS_data.c.time_in <= end))
+    #s = select([RTLS_data]).where(RTLS_data.c.time_in >= start)
     rp = connection.execute(s)
     df = pd.DataFrame(rp.fetchall())
     print(len(df))
@@ -82,15 +82,15 @@ def updateRTLSReceivers(receivers,RTLS_Receivers,connection):
 def storeRTLS(hits,RTLS_data,connection):
     for i,row in hits.iterrows():
         cond = sa.and_(
-        RTLS_data.c.Receiver == row.Receiver,
-        RTLS_data.c.Time_In == row.Time_In,
-        RTLS_data.c.Time_Out == row.Time_Out)
+        RTLS_data.c.receiver == row.receiver,
+        RTLS_data.c.time_in == row.time_in,
+        RTLS_data.c.time_out == row.time_out)
         exists = connection.execute(sa.select([RTLS_data]).where(cond)).scalar()
         if not exists:
             ins_vals = {
-                'Receiver':row.Receiver,
-                'Time_In':row.Time_In,
-                'Time_Out':row.Time_Out
+                'receiver':row.receiver,
+                'time_in':row.time_in,
+                'time_out':row.time_out
             }
             #print ins_vals
             ins = sa.insert(RTLS_data).values(ins_vals)
@@ -180,10 +180,10 @@ def get_weekly_report_pg(anchor_date,look_back_days,db_u,db_pw,target_badges,wee
 
         for t in target_badges:#tables:
             print(t)
-            if insp.has_table(str('Table_'+str(t))):
-                tbl = metadata.tables[str('Table_'+str(t))]
-                s = select([tbl]).where(and_(tbl.c.Time_In >= lft_win,tbl.c.Time_In <= rght_win))
-                #s = select([RTLS_data]).where(RTLS_data.c.Time_In >= start)
+            if insp.has_table(str('table_'+str(t))):
+                tbl = metadata.tables[str('table_'+str(t))]
+                s = select([tbl]).where(and_(tbl.c.time_in >= lft_win,tbl.c.time_in <= rght_win))
+                #s = select([RTLS_data]).where(RTLS_data.c.time_in >= start)
                 rp = connection.execute(s)
                 df = pd.DataFrame(rp.fetchall())
                 if df.empty:
@@ -196,9 +196,9 @@ def get_weekly_report_pg(anchor_date,look_back_days,db_u,db_pw,target_badges,wee
             else: print("no table")#pass
     df = pd.concat(df_list)
 
-    df['Duration'] = (df.Time_Out - df.Time_In).astype('timedelta64[s]')/60
-    df = df.groupby(['RTLS_ID']).agg({'Duration': 'sum'})
-    df.sort_values('Duration',axis=0,inplace=True,ascending=True)
+    df['duration'] = (df.time_out - df.time_in).astype('timedelta64[s]')/60
+    df = df.groupby(['RTLS_ID']).agg({'duration': 'sum'})
+    df.sort_values('duration',axis=0,inplace=True,ascending=True)
     fname = 'IM_Badge_data_from_{}_to_{}_runOn{}.csv'.format(lft_win,rght_win,datetime.date(datetime.now()))
     df.to_csv(os.path.join(weekly_report_dir,fname))
     print("Of the {} active badges, {} had data between {} and {}".format(len(target_badges),len(df),lft_win,rght_win))
@@ -222,18 +222,18 @@ def csv_to_db_pg(tmp_csv_path, archive_csv_path,db_u, db_pw):
         # Creates connection to db and loads appropriate scripts
         df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
         engine = sa.create_engine(df_string)
-        if not sa.inspect(engine).has_table('RTLS_Receivers'):
+        if not sa.inspect(engine).has_table('rtls_receivers'):
             metadata = sa.MetaData(bind=engine) # Should this be engine instead of DB? If so, move out of loop and remove dupe below
-            RTLS_Receivers = sa.Table('RTLS_Receivers',metadata,
-                    Column('Receiver',Integer(),primary_key=True,unique=True),
-                    Column('ReceiverName',String(255)),
-                    Column('LocationCode',String(255))
+            RTLS_Receivers = sa.Table('rtls_receivers',metadata,
+                    Column('receiver',Integer(),primary_key=True,unique=True),
+                    Column('receiver_name',String(255)),
+                    Column('location_code',String(255))
             )
             metadata.create_all(engine)
         else:
             metadata = sa.MetaData(bind=engine)
             metadata.reflect()
-            RTLS_Receivers = metadata.tables['RTLS_Receivers']
+            RTLS_Receivers = metadata.tables['rtls_receivers']
         connection = engine.connect()
         connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
 
@@ -248,22 +248,22 @@ def csv_to_db_pg(tmp_csv_path, archive_csv_path,db_u, db_pw):
         RTLS_dump['BadgeTimeIn'] = pd.to_datetime(RTLS_dump['BadgeTimeIn'])
         RTLS_dump['BadgeTimeOut'] = pd.to_datetime(RTLS_dump['BadgeTimeOut'])
         hit_cols = ['Badge','Receiver','BadgeTimeIn','BadgeTimeOut']
-        hit_col_remap = ['RTLS_ID','Receiver','Time_In','Time_Out']
+        hit_col_remap = ['RTLS_ID','receiver','time_in','time_out']
         hits = RTLS_dump[hit_cols].copy()
         hits.columns = hit_col_remap
-        hits['Receiver'] = hits['Receiver'].astype('int')
+        hits['receiver'] = hits['receiver'].astype('int')
         hits.drop_duplicates(subset=None, keep='first', inplace=True)
 
         for badge in hits.RTLS_ID.unique():
-            Table_name = 'Table_'+str(badge)
+            Table_name = 'table_'+str(badge)
             # check if badge table exists, and create if it doesn't
             if not sa.inspect(engine).has_table(Table_name):
                 metadata = sa.MetaData(engine)
                 # Create a table with the appropriate Columns
                 RTLS_Data = sa.Table(Table_name, metadata,
-                    Column('Receiver',Integer, nullable=False),
-                    Column('Time_In',DateTime()),
-                    Column('Time_Out',DateTime()))
+                    Column('receiver',Integer, nullable=False),
+                    Column('time_in',DateTime()),
+                    Column('time_out',DateTime()))
                 metadata.create_all()
             else:
                 metadata = sa.MetaData(bind=engine)
@@ -355,9 +355,9 @@ def locRecode_izer(df_chunk_pckged):
     df_chunk = df_chunk_pckged[0]
     receiver_dict = df_chunk_pckged[1]
     receiverName_dict = df_chunk_pckged[2]
-    df_chunk['Receiver_recode'] = df_chunk['Receiver'].replace(to_replace=receiver_dict, inplace=False)
-    df_chunk['Receiver_name'] = df_chunk['Receiver'].replace(to_replace=receiverName_dict,inplace=False)
-    df_chunk['Duration'] = (df_chunk.Time_Out - df_chunk.Time_In).astype('timedelta64[s]')/60
+    df_chunk['receiver_recode'] = df_chunk['receiver'].replace(to_replace=receiver_dict, inplace=False)
+    df_chunk['receiver_name'] = df_chunk['receiver'].replace(to_replace=receiverName_dict,inplace=False)
+    df_chunk['duration'] = (df_chunk.time_out - df_chunk.time_in).astype('timedelta64[s]')/60
     return df_chunk
 
 def locRecode_parallel_izer(func,badge_data,receiver_dict, receiverName_dict, num_processes):
@@ -366,73 +366,73 @@ def locRecode_parallel_izer(func,badge_data,receiver_dict, receiverName_dict, nu
         num_processes = cpu_count()#min(df.shape[1], cpu_count())
     with closing(Pool(num_processes)) as pool:
         # creates list of data frames for each badge
-        df_chunks = [badge_data[badge_data.Badge == ID].copy() for ID in badge_data.Badge.unique()]
+        df_chunks = [badge_data[badge_data.badge == ID].copy() for ID in badge_data.badge.unique()]
         df_chunks_pckged = [[df_chunk,receiver_dict,receiverName_dict] for df_chunk in df_chunks] # packages dicts with each data chunk
         results_list = pool.map(func, df_chunks_pckged)
         pool.terminate()
         return pd.concat(results_list)#, axis=1)
 
-def loc_code_badge_data(badge_data, db_name, db_loc):
-    #### This recodes a set of worn badges using reciever recodes stored in reciever tables
-    ####
-    # connect to db
-    engine = sa.create_engine('sqlite:///'+db_loc+db_name)
-    metadata = sa.MetaData(bind=engine)
-    metadata.reflect()
-    RTLS_Receivers = metadata.tables['RTLS_Receivers']
-    connection = engine.connect()
-    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+# def loc_code_badge_data(badge_data, db_name, db_loc):
+#     #### This recodes a set of worn badges using reciever recodes stored in reciever tables
+#     ####
+#     # connect to db
+#     engine = sa.create_engine('sqlite:///'+db_loc+db_name)
+#     metadata = sa.MetaData(bind=engine)
+#     metadata.reflect()
+#     RTLS_Receivers = metadata.tables['RTLS_Receivers']
+#     connection = engine.connect()
+#     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+#
+#     # get all recievers w/o a location code
+#     rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
+#     receivers = pd.DataFrame(rp.fetchall())
+#     if receivers.empty:
+#         print('Problem mapping recievers to badge data.')
+#         return None
+#     else:
+#         receivers.columns = rp.keys()
+#         receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
+#         receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
+#         num_processes = 4
+#         df_loc_coded = locRecode_parallel_izer(
+#             func = locRecode_izer,
+#             badge_data = badge_data,
+#             receiver_dict = receiver_dict,
+#             receiverName_dict = receiverName_dict,
+#             num_processes = 4
+#             )
+#         return df_loc_coded
 
-    # get all recievers w/o a location code
-    rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
-    receivers = pd.DataFrame(rp.fetchall())
-    if receivers.empty:
-        print('Problem mapping recievers to badge data.')
-        return None
-    else:
-        receivers.columns = rp.keys()
-        receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
-        receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
-        num_processes = 4
-        df_loc_coded = locRecode_parallel_izer(
-            func = locRecode_izer,
-            badge_data = badge_data,
-            receiver_dict = receiver_dict,
-            receiverName_dict = receiverName_dict,
-            num_processes = 4
-            )
-        return df_loc_coded
-
-def loc_code_badge_data_ppg(badge_data, db_u, db_pw,site):
-    #### This recodes a set of worn badges using reciever recodes stored in reciever tables
-    ####
-    # connect to db
-    df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
-    engine = sa.create_engine(df_string)
-    metadata.reflect()
-    RTLS_Receivers = metadata.tables['RTLS_Receivers']
-    connection = engine.connect()
-    connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-
-    # get all recievers w/o a location code
-    rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
-    receivers = pd.DataFrame(rp.fetchall())
-    if receivers.empty:
-        print('Problem mapping recievers to badge data.')
-        return None
-    else:
-        receivers.columns = rp.keys()
-        receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
-        receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
-        num_processes = 4
-        df_loc_coded = locRecode_parallel_izer(
-            func = locRecode_izer,
-            badge_data = badge_data,
-            receiver_dict = receiver_dict,
-            receiverName_dict = receiverName_dict,
-            num_processes = 4
-            )
-        return df_loc_coded
+# def loc_code_badge_data_ppg(badge_data, db_u, db_pw,site):
+#     #### This recodes a set of worn badges using reciever recodes stored in reciever tables
+#     ####
+#     # connect to db
+#     df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
+#     engine = sa.create_engine(df_string)
+#     metadata.reflect()
+#     RTLS_Receivers = metadata.tables['RTLS_Receivers']
+#     connection = engine.connect()
+#     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+#
+#     # get all recievers w/o a location code
+#     rp = connection.execute(sa.select([RTLS_Receivers]))#.where(RTLS_Receivers.c.Receiver.in_(list(badge_data.Receiver.unique()))))
+#     receivers = pd.DataFrame(rp.fetchall())
+#     if receivers.empty:
+#         print('Problem mapping recievers to badge data.')
+#         return None
+#     else:
+#         receivers.columns = rp.keys()
+#         receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
+#         receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
+#         num_processes = 4
+#         df_loc_coded = locRecode_parallel_izer(
+#             func = locRecode_izer,
+#             badge_data = badge_data,
+#             receiver_dict = receiver_dict,
+#             receiverName_dict = receiverName_dict,
+#             num_processes = 4
+#             )
+#         return df_loc_coded
 
 def loc_code_badge_data_pg(badge_data, db_u, db_pw, site):
     #### This recodes a set of worn badges using reciever recodes stored in reciever tables
@@ -442,7 +442,7 @@ def loc_code_badge_data_pg(badge_data, db_u, db_pw, site):
     engine = sa.create_engine(df_string)
     metadata = sa.MetaData(bind=engine)
     metadata.reflect()
-    RTLS_Receivers = metadata.tables['RTLS_Receivers']
+    RTLS_Receivers = metadata.tables['rtls_receivers']
     connection = engine.connect()
     connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
 
@@ -454,9 +454,9 @@ def loc_code_badge_data_pg(badge_data, db_u, db_pw, site):
         return None
     else:
         receivers.columns = rp.keys()
-        receiver_dict = receivers.set_index('Receiver')['LocationCode'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
-        receiverName_dict = receivers.set_index('Receiver')['ReceiverName'].to_dict()
-        num_processes = 4
+        receiver_dict = receivers.set_index('receiver')['location_code'].to_dict() #IM_loc_map uses no 'fill' from old coding, but does have NA's
+        receiverName_dict = receivers.set_index('receiver')['receiver_name'].to_dict()
+        #num_processes = 4
         df_loc_coded = locRecode_parallel_izer(
             func = locRecode_izer,
             badge_data = badge_data,
@@ -464,7 +464,7 @@ def loc_code_badge_data_pg(badge_data, db_u, db_pw, site):
             receiverName_dict = receiverName_dict,
             num_processes = 4
             )
-        return df_loc_coded
+    return df_loc_coded
 ####################################################################################################
 ############################## Applies data cleaning rules to recategorized data
 ####################################################################################################
@@ -476,18 +476,18 @@ def apply_rules(df,rule_1_thresh,rule_2_thresh,rule_2_locs):
     #Any “loop” needs to be recoded as OTHER/UNKNOWN, if sensor pings for more than 10 minutes
     #NH 01 Hall by Visitor Elevators should be recoded as OTHER/UNKNOWN, if sensor pings for more than 10 minutes
     print('Halls, etc. > 10 minutes...')
-    print(len(df.loc[((df.Duration > 10) & (df.Receiver_name.str.contains('elevator|connector|loop|NH 01 Hall by Visitor Elevators',case=False,regex=True))),'Receiver_recode']))
-    df.loc[((df.Duration > 10) & (df.Receiver_name.str.contains('elevator|connector|loop|NH 01 Hall by Visitor Elevators',case=False,regex=True))),'Receiver_recode'] = 'OTHER/UNKNOWN'
+    print(len(df.loc[((df.duration > 10) & (df.receiver_name.str.contains('elevator|connector|loop|NH 01 Hall by Visitor Elevators',case=False,regex=True))),'Receiver_recode']))
+    df.loc[((df.duration > 10) & (df.receiver_name.str.contains('elevator|connector|loop|NH 01 Hall by Visitor Elevators',case=False,regex=True))),'Receiver_recode'] = 'OTHER/UNKNOWN'
 
     full_num_hits = len(df)
     print(full_num_hits)
-    rule_1_flagged = df[df.Duration > rule_1_thresh].copy()
+    rule_1_flagged = df[df.duration > rule_1_thresh].copy()
     print('Number of rule 1 flagged... '+str(len(rule_1_flagged))+', '+str((len(rule_1_flagged) / full_num_hits)*10)+'% of total data')
-    df.loc[df.Duration > rule_1_thresh,'Receiver_recode'] = 'OTHER/UNKNOWN'
+    df.loc[df.duration > rule_1_thresh,'receiver_recode'] = 'OTHER/UNKNOWN'
 
-    rule_2_flagged = df[(df.Duration > rule_2_thresh) & (df.Duration < rule_1_thresh) & (~df.Receiver_recode.isin(rule_2_locs))].copy()
+    rule_2_flagged = df[(df.duration > rule_2_thresh) & (df.duration < rule_1_thresh) & (~df.receiver_recode.isin(rule_2_locs))].copy()
     print('Number of rule 2 flagged... '+str(len(rule_2_flagged))+', '+str((len(rule_2_flagged) / full_num_hits)*10)+'% of total data')
-    df.loc[((df.Duration > rule_2_thresh) & (df.Duration < rule_1_thresh) & (~df.Receiver_recode.isin(rule_2_locs))),'Receiver_recode'] = 'OTHER/UNKNOWN'
+    df.loc[((df.duration > rule_2_thresh) & (df.duration < rule_1_thresh) & (~df.receiver_recode.isin(rule_2_locs))),'receiver_recode'] = 'OTHER/UNKNOWN'
 
     return df
 
@@ -499,10 +499,10 @@ def apply_rules(df,rule_1_thresh,rule_2_thresh,rule_2_locs):
 
 def make_interval_metrics(df):
 
-    Days = pd.date_range(start=min(df.Time_In.dt.date), end=max(df.Time_Out.dt.date), freq='D', tz=None, normalize=False, name='Date', closed=None)
+    Days = pd.date_range(start=min(df.time_in.dt.date), end=max(df.time_out.dt.date), freq='D', tz=None, normalize=False, name='Date', closed=None)
     Intervals = ['all_24','night','morning','afternoon','evening','rounds']
-    Badges = df.Badge.unique()
-    cols = df.Receiver_recode.unique().tolist()#.append('Total')
+    Badges = df.badge.unique()
+    cols = df.receiver_recode.unique().tolist()#.append('Total')
     cols = cols + ['Total']
     idx = pd.MultiIndex.from_product([Days, Badges, Intervals],
                                       names=['Day', 'Badges','Interval'])
@@ -520,27 +520,27 @@ def make_interval_metrics(df):
     # loop... for each day, for each badge, for each interval... calculate sums
     for day in Days:
         for Badge in Badges:
-            df_day = df[((df.Badge == Badge)) & ((df.Time_In.dt.date == day) | (df.Time_Out.dt.date == day))].copy() # select all data for badge and day
+            df_day = df[((df.badge == Badge)) & ((df.time_in.dt.date == day) | (df.time_out.dt.date == day))].copy() # select all data for badge and day
             # test if empty
             if not df_day.empty:
                 for Interval in Intervals:
                     # sets start and stop of the intervals
                     start = day + pd.offsets.Hour(interval_offsets[Interval]['start'])
                     stop = day + pd.offsets.Hour(interval_offsets[Interval]['stop'] + 1)
-                    front_time_slice = ((df_day.Time_In >= start) & (df_day.Time_In <= stop))
-                    back_time_slice = ((df_day.Time_Out >= start) & (df_day.Time_Out <= stop))
+                    front_time_slice = ((df_day.time_in >= start) & (df_day.time_in <= stop))
+                    back_time_slice = ((df_day.time_out >= start) & (df_day.time_out <= stop))
                     df_temp = df_day[(front_time_slice | back_time_slice)].copy()
                     if not df_temp.empty:
                         # trim
-                        if df_temp.Time_In.min() < start:
-                            df_temp.at[df_temp[['Time_In']].idxmin(),'Time_In'] = start
-                        if df_temp.Time_Out.max() > stop:
-                            df_temp.at[df_temp[['Time_Out']].idxmax(),'Time_Out'] = stop
+                        if df_temp.time_in.min() < start:
+                            df_temp.at[df_temp[['time_in']].idxmin(),'time_in'] = start
+                        if df_temp.time_out.max() > stop:
+                            df_temp.at[df_temp[['time_out']].idxmax(),'time_out'] = stop
                         # Recalculate duration
-                        df_temp['Duration'] = (df_temp.Time_Out - df_temp.Time_In).dt.seconds
+                        df_temp['duration'] = (df_temp.time_out - df_temp.time_in).dt.seconds
 
                         # Calculate sum durations by location category
-                        x = df_temp.groupby('Receiver_recode')['Duration'].sum()
+                        x = df_temp.groupby('receiver_recode')['duration'].sum()
                         # store it in summary df; x ends up being a series with location values as row labels
                         for loc in x.index.array:
                             df_sum.loc[(day,Badge,Interval),loc] = x.at[loc]
@@ -559,9 +559,9 @@ def make_interval_metrics(df):
     # define function to create timeseries for each badge and location
 
 # function for creating timeseries from epoch data... used in seqdef and ts functions
-def ts_it(idx,Time_In,Time_Out):
-    In = pd.Series(data=True,index=Time_In)
-    Out = pd.Series(data=False,index=Time_Out)
+def ts_it(idx,time_in,time_out):
+    In = pd.Series(data=True,index=time_in)
+    Out = pd.Series(data=False,index=time_out)
     both = pd.concat([In,Out])
     both.sort_index(ascending=True,inplace=True)
     both = both.loc[~both.index.duplicated(keep=False)]
@@ -579,7 +579,7 @@ def make_seqdef_data(df,start,stop,f):
     df_ts.index.rename('TimeStamp')
     for loc in locs:
         mask = (df.Receiver_recode == loc)
-        df_ts[loc] = ts_it(idx,df[mask]['Time_In'].values,df[mask]['Time_Out'].values)
+        df_ts[loc] = ts_it(idx,df[mask]['time_in'].values,df[mask]['time_out'].values)
 
     df_ts['Combo'] = 'NA'
     for loc in locs:
@@ -607,8 +607,8 @@ def make_timeseries_df(df,f):
     cols = pd.MultiIndex.from_product([badges, locs],
                                       names=['Badge', 'Location'])
     idx = pd.date_range(
-        min(df.Time_In.dt.date),
-        max(df.Time_Out.dt.date),
+        min(df.time_in.dt.date),
+        max(df.time_out.dt.date),
         freq=f) #'min', 'S'
     data = False
     df_ts = pd.DataFrame(index=idx,columns=cols,data=data)
@@ -618,7 +618,7 @@ def make_timeseries_df(df,f):
     for badge in badges:
         for loc in locs:
             mask = ((df.Badge == badge) & (df.Receiver_recode == loc))
-            df_ts[badge,loc] = ts_it(idx,df[mask]['Time_In'].values,df[mask]['Time_Out'].values)
+            df_ts[badge,loc] = ts_it(idx,df[mask]['time_in'].values,df[mask]['time_out'].values)
     # this collapses across all badges for a 'total' with multiple badges
     # or just one if only data for one badge is passed to function
     df_ts = df_ts.groupby(level = 'Location', axis = 1).sum()
@@ -629,9 +629,9 @@ def make_timeseries_df(df,f):
     return df_ts
 
 def make_timeseries_df_for_dummies(df):
-    df.rename(columns = {'Time_In':'hour','Receiver_recode':'Location'},inplace = True)
+    df.rename(columns = {'time_in':'hour','receiver_recode':'location'},inplace = True)
     df.set_index('hour', inplace = True)
-    df = df.groupby([df.index.hour, 'Location'])['Duration'].sum()
+    df = df.groupby([df.index.hour, 'location'])['duration'].sum()
     df = df.reset_index()
     return df
 
@@ -648,8 +648,8 @@ def ts_it_PAR(df_chunk):
     df_ts.index.rename('TimeStamp')
     for loc in locs:
         mask = (d.Receiver_recode == loc)
-        In = pd.Series(data=True,index=d[mask]['Time_In'].values)
-        Out = pd.Series(data=False,index=d[mask]['Time_Out'].values)
+        In = pd.Series(data=True,index=d[mask]['time_in'].values)
+        Out = pd.Series(data=False,index=d[mask]['time_out'].values)
         both = pd.concat([In,Out])
         both.sort_index(ascending=True,inplace=True)
         both = both.loc[~both.index.duplicated(keep=False)]
@@ -661,8 +661,8 @@ def ts_it_PAR(df_chunk):
 def make_timeseries_df_PAR(df,f,num_processes):
     '''Takes a function and dataframe, chunks up by badge'''
     idx = pd.date_range(
-        min(df.Time_In.dt.date),
-        max(df.Time_Out.dt.date),
+        min(df.time_in.dt.date),
+        max(df.time_out.dt.date),
         freq=f)
     locs = df.Receiver_recode.unique().tolist()
     if num_processes==None:
@@ -682,5 +682,5 @@ def make_timeseries_df_PAR(df,f,num_processes):
 
 def relabel_nodes(df, nodes):
     node_dict = dict(zip(nodes.rec_num,nodes.id))
-    df['Receiver'] = df['Receiver'].map(node_dict)
+    df['receiver'] = df['receiver'].map(node_dict)
     return(df)
