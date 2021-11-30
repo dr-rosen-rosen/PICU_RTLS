@@ -68,11 +68,11 @@ def pullReceivers(RTLS_Receivers,connection):
 # Inserts new recievers into the receivers table
 def updateRTLSReceivers(receivers,RTLS_Receivers,connection):
     for i,row in receivers.iterrows():
-        exists = connection.execute(sa.select([RTLS_Receivers.c.Receiver]).where(RTLS_Receivers.c.Receiver == row.Receiver)).scalar()
+        exists = connection.execute(sa.select([RTLS_Receivers.c.receiver]).where(RTLS_Receivers.c.receiver == row.Receiver)).scalar()
         if not exists:
             ins_vals = {
-                'Receiver':row.Receiver,
-                'ReceiverName':row.ReceiverName
+                'receiver':row.Receiver,
+                'receiver_name':row.ReceiverName
             }
             ins = sa.insert(RTLS_Receivers).values(ins_vals)
             connection.execute(ins)

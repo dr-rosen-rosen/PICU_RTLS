@@ -396,10 +396,10 @@ prep_net_data <- function(df) {
 #####################   Functions for automating data upload from email
 ###############################################################################################
 
-get_files_from_outlk <- function(outlk_sess) {
+get_files_from_outlk <- function(outlk_sess, n) {
   # Go to the folder for RTLS data
   folder <- outlk_sess$get_folder('RTLS_Data')
-  tst_list <- folder$list_emails(n=10)
+  tst_list <- folder$list_emails(n)
 
   for (em in tst_list) {
     # Check source of data

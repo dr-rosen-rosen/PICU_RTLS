@@ -34,7 +34,8 @@ source(here('1_funcs.R'), echo = TRUE)
 ######### Automated data flow from email to postgres
 
 get_files_from_outlk(
-  outlk_sess = Microsoft365R::get_business_outlook()
+  outlk_sess = Microsoft365R::get_business_outlook(),
+  n = 10 # Number of emails to pull at once. Seens to choke with >10; for a full week it's 16 files w/ data and battery reports
 )
 
 csv_to_db_pg(
@@ -45,7 +46,7 @@ csv_to_db_pg(
 
 get_weekly_report_pg(
   anchor_date = lubridate::today(),
-  look_back_days = 9,
+  look_back_days = 8,
   db_u = config$db_u,
   db_pw = config$db_pw,
   target_badges = get_active_badges(config$badge_file),
