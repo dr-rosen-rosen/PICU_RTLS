@@ -399,7 +399,7 @@ prep_net_data <- function(df) {
 get_files_from_outlk <- function(outlk_sess, n) {
   # Go to the folder for RTLS data
   folder <- outlk_sess$get_folder('RTLS_Data')
-  tst_list <- folder$list_emails(n)
+  tst_list <- folder$list_emails(n=n)
 
   for (em in tst_list) {
     # Check source of data

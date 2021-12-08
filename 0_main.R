@@ -35,7 +35,7 @@ source(here('1_funcs.R'), echo = TRUE)
 
 get_files_from_outlk(
   outlk_sess = Microsoft365R::get_business_outlook(),
-  n = 10 # Number of emails to pull at once. Seens to choke with >10; for a full week it's 16 files w/ data and battery reports
+  n = 2 # Number of emails to pull at once. Seens to choke with >10; for a full week it's 16 files w/ data and battery reports
 )
 
 csv_to_db_pg(
