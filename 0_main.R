@@ -10,119 +10,170 @@ library(config)
 library(reticulate)
 library(lubridate)
 library(tidyverse)
-#library(TraMineR)
-#library(data.table)
 library(patchwork)
 debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
-Sys.setenv(R_CONFIG_ACTIVE = "pilot_study_RTLS_030819_db") # 'default')#
+Sys.setenv(R_CONFIG_ACTIVE = 'default')#"pilot_study_RTLS_030819_db") # 
 config <- config::get()
 Sys.setenv(RETICULATE_PYTHON = config$py_version)
-reticulate::source_python('1_funcs.py')
+# reticulate::source_python('1_funcs.py')
 reticulate::source_python('1_funcs_pg.py')
 source(here('1_funcs.R'), echo = TRUE)
-#source(here('2a_connect.R'), echo = TRUE)
-
-########## Loads in automated csv files
-########## OLD SQLITE VERSION
-# csv_to_db(
-#   db_name = config$db_name,
-#   db_loc = config$db_loc,
-#   in_path = config$in_path
-#   )
 
 ######### Automated data flow from email to postgres
+#########
 
 get_files_from_outlk(
   outlk_sess = Microsoft365R::get_business_outlook(),
-  n = 2 # Number of emails to pull at once. Seens to choke with >10; for a full week it's 16 files w/ data and battery reports
+  n = 10 # Number of emails to pull at once. Chokes with >10; for a full week it's 16 files w/ data and battery reports
 )
 
 csv_to_db_pg(
   tmp_csv_path = config$tmp_csv_path, 
   archive_csv_path = config$archive_csv_path,
   db_u = config$db_u, 
-  db_pw = config$db_pw)
+  db_pw = config$db_pw) 
 
 get_weekly_report_pg(
   anchor_date = lubridate::today(),
   look_back_days = 8,
   db_u = config$db_u,
   db_pw = config$db_pw,
-  target_badges = get_active_badges(config$badge_file),
+  target_badges = getActiveBadges(config$badge_file),
   weekly_report_dir = config$weekly_report_dir)
+beepr::beep(sound = 1)
 
-data_for_fb_df <- get_and_locCode_RTLS_data_pg(
-  badges = get_active_badges(config$badge_file), 
-  strt = lubridate::ymd('2021-11-7'), 
-  stp = lubridate::ymd('2021-11-22'), 
-  sites = c('jhh'),
-  use_rules = TRUE
+######### Pulling data for feedback reports and analysis
+#########
+
+site <- c('jhh','bmc') # 'jhh','bmc'
+strt <-  lubridate::ymd('2023-01-01')#config$FB_report_start,#lubridate::ymd('2022-02-27'), 
+stp <- lubridate::ymd('2023-04-01')#config$FB_report_stop,#lubridate::ymd('2022-03-01'), 
+data_for_fb_df  <- get_and_locCode_RTLS_data_pg(
+  badges = getActiveBadges(config$badge_file), #unique(bayview_active_badges$RTLS_ID), 
+  strt = strt, #lubridate::ymd('2022-01-01'),#config$FB_report_start,#lubridate::ymd('2022-02-27'), 
+  stp = stp, #lubridate::ymd('2022-7-01'),#config$FB_report_stop,#lubridate::ymd('2022-03-01'), 
+  sites = site, #c('bmc'), # 'jhh','bmc'
+  use_rules = TRUE # this is currently commented out in the function
 )
-nrow(data_for_fb_df)
+
+# Check for same badges with data at both sites on same day
+data_for_fb_df %>%
+  mutate(date = date(time_in)) %>%
+  dplyr::select(site,badge,date) %>%
+  distinct() %>%
+  group_by(badge,date) %>%
+  summarise(dupe = n()>1) %>%
+  filter(dupe == TRUE)
+write_csv(df,'duplicated_badges.csv')
+
+# Clean timelines
+data_for_fb_df <- data_for_fb_df %>%
+  mutate(
+    receiver_recode = as.character(receiver_recode)
+  )
+data_for_fb_df <- data_for_fb_df %>%
+  filter(date(time_in) < date(time_out)) %>%
+  apply(1,split_days) %>%
+  dplyr::bind_rows() %>%
+  mutate(
+    time_in = as.POSIXct(time_in,origin = "1970-01-01", tz = "America/New_York"),
+    time_out = as.POSIXct(time_out,origin = "1970-01-01", tz = "America/New_York")
+  ) %>%
+  mutate(
+    time_in = if_else(is.na(time_in),
+                      as.POSIXct(paste(as.character(lubridate::date(time_out)),"00:00:00"), format = "%Y-%m-%d %H:%M:%S"),
+                      time_in),
+    time_out = if_else(is.na(time_out),
+                       as.POSIXct(paste(as.character(lubridate::date(time_in)),"23:59:59"), format = "%Y-%m-%d %H:%M:%S"),
+                       time_out),
+  ) %>%
+  mutate(
+    duration = as.numeric(difftime(time_out,time_in, units = "mins"))
+  ) %>%
+  full_join(data_for_fb_df[which(date(data_for_fb_df$time_in) == date(data_for_fb_df$time_out)),]) %>%
+  filter(if_any(everything(), ~ !is.na(.)))
+
+######### Save Individual FB reports
+#########
 
 create_FB_reports(
   df = data_for_fb_df,
   FB_report_dir = config$FB_report_dir,
-  save_badge_timeline = FALSE
+  save_badge_timeline = TRUE,
+  min_hours_for_fb = 40*4*3 #config$min_hours_for_fb
 )
+
+######### Save data for analysis
+#########
+
+data_for_fb_df$receiver_recode <- factor(data_for_fb_df$receiver_recode,
+                             levels = c('Patient room','MD Workroom','Ward Hall','Education','Supply and admin','Transit','OTHER/UNKNOWN','Family waiting space'))
+data_for_fb_df <- data_for_fb_df %>% transform(
+  receiver_recode=plyr::revalue(receiver_recode,c("OTHER/UNKNOWN"="Other",'Family waiting space'='Family space')))
+
+# create summary by badge, day, and location
+data_for_fb_df <- data_for_fb_df %>%
+  mutate(date = date(time_in)) %>%
+  dplyr::select(date,badge,receiver_recode, duration) %>%
+  group_by(date, badge,receiver_recode) %>%
+  summarize(
+    duration = sum(duration, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(badge,date) %>%
+  mutate(perc = duration / sum(duration)) %>%
+  drop_na(perc)
+# save daily summary
+data_for_fb_df %>%
+  write_csv(., paste0('all_',site,'_dataRun_',today(),'.csv'))
+  
+data_for_fb_df %>%
+  # mutate(date = date(time_in)) %>%
+  group_by(date, receiver_recode) %>%
+  summarize(
+    avg_perc = mean(perc, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(receiver_recode == 'Patient room') %>%
+  group_by( yw = paste( year(date), week(date))) %>%
+  mutate(date = min(date), avg_perc = mean(avg_perc)) %>%
+  ggplot(aes(x=date,y=avg_perc)) + geom_line() +
+  geom_vline(xintercept = lubridate::ymd("2020-11-19"), color = 'green') +
+  geom_vline(xintercept = lubridate::ymd("2021-02-23"), color = 'red') +
+  geom_vline(xintercept = lubridate::ymd("2021-05-11"), color = 'yellow') +
+  geom_vline(xintercept = lubridate::ymd("2021-07-07"), color = 'green') +
+  geom_vline(xintercept = lubridate::ymd("2021-08-04"), color = 'yellow') +
+  geom_vline(xintercept = lubridate::ymd("2021-12-29"), color = 'red') +
+  geom_vline(xintercept = lubridate::ymd("2022-01-05"), color = 'purple') +
+  ggthemes::theme_tufte()
+  
+  
+# write_csv(data_roll_up, 'dailySumDataJulyToDecember2021.csv')
+
+
 
 make_overall_bar(df = data_for_fb_df, badge = 524787)
 
+### get list of bayview badges we don't have data for:
+
+active_badges <- getActiveBadges(config$badge_file)
+bayview_active_badges <- readxl::read_excel('/Users/mrosen44/Johns Hopkins University/Amanda Bertram - Graduate Medical Training Laboratory/RTLS BADGES 2021-2022/Badge Numbers 2021.xlsx') %>%
+  filter(CAMPUS == 'Bayview') %>%
+  rename(c('RTLS_ID' = 'RTLS BADGE ID')) %>%
+  filter(RTLS_ID %in% active_badges)
+
 
 ########## Updates receiver location codes
-rcvr_dscrp_to_loc_code(
-  db_name = config$db_name,
-  db_loc = config$db_loc,
-  rcvr_recode_file = config$rcvr_recode_file,
-  rcvr_recode_file_loc = config$rcvr_recode_file_loc,
-  print_new_recievers = TRUE
-  )
 
-########## Manul review and update of locations in table
-# returns overlap between receiver id's at jhh and bmc
-x <- check_receiver_overlap()
-#takes location codes from old DB and pushes to pg
-migrate_location_codes(
-  pg_con = get_connection(
-    db_name = paste0('rtls_','jhh'),
-    db_u = config$db_u,
-    db_pw = config$db_pw),
-  sqlite_con = get_sqlite_con(
-    db_loc = config$db_loc,
-    db_name = config$db_name
-  )
-)
-bmc <- get_receiver_loc_data(
-  con = get_connection(
-    db_name = paste0('rtls_','bmc'),
-    db_u = config$db_u,
-    db_pw = config$db_pw),
-  t_name = 'rtls_receivers')
+#### This is sqlite version. 
+# rcvr_dscrp_to_loc_code(
+#   db_name = config$db_name,
+#   db_loc = config$db_loc,
+#   rcvr_recode_file = config$rcvr_recode_file,
+#   rcvr_recode_file_loc = config$rcvr_recode_file_loc,
+#   print_new_recievers = TRUE
+#   )
 
-old_loc_codes <- get_receiver_loc_data(
-  con = get_sqlite_con(
-    db_loc = config$db_loc,
-    db_name = config$db_name
-  ),
-  t_name = 'RTLS_Receivers'
-)
-sqlite_con <- get_sqlite_con(
-  db_loc = config$db_loc,
-  db_name = config$db_name
-)
 
-get_receiver_loc_data(
-  con = get_connection(
-    db_name = paste0('rtls_','jhh'),
-    db_u = config$db_u,
-    db_pw = config$db_pw),
-  t_name = 'RTLS_Receivers') #%>%
-  #select(Receiver) %>% unique(.)
-
-write_csv(bmc, file = 'bmc_receiver_recode.csv')
-#df <- read.csv('receiver_recode_reviewed.csv')
-manual_receiver_update(df = df, con = con)
 
 
 # test variables
@@ -139,26 +190,26 @@ x <- get_weekly_report(
   look_back_days = 8, #
   db_name = config$db_name,
   db_loc = config$db_loc,
-  target_badges = get_active_badges(config$badge_file),
+  target_badges = getActiveBadges(config$badge_file),
   weekly_report_dir = config$weekly_report_dir
   )
 
-test <- get_active_badges(config$badge_file)
+test <- getActiveBadges(config$badge_file)
 audit_active_badges(
   con = con,
-  active_badges = get_active_badges(config$badge_file)
+  active_badges = getActiveBadges(config$badge_file)
 )
-# create_FB_reports(
-#   target_badges = get_active_badges(config$badge_file),
-#   strt = config$FB_report_start,
-#   stp = config$FB_report_stop,
-#   FB_report_dir = config$FB_report_dir,
-#   save_badge_timeline = FALSE
-# )
+create_FB_reports(
+  target_badges = getActiveBadges(config$badge_file),
+  strt = config$FB_report_start,
+  stp = config$FB_report_stop,
+  FB_report_dir = config$FB_report_dir,
+  save_badge_timeline = FALSE
+)
 
 # load some badge data
 x <- get_RTLS_data(
-  badges = '526896',  #get_active_badges(config$badge_file),#'all',#badges,
+  badges = '526896',  #getActiveBadges(config$badge_file),#'all',#badges,
   strt = ymd("2021-10-20"),#config$FB_report_start,,#config$FB_report_start,#'all',#strt,
   stp = ymd("2021-10-22"), #config$FB_report_stop #config$FB_report_stop#'all'#stp
   con = get_connection(
@@ -256,6 +307,15 @@ zzz_par <- make_timeseries_df_PAR(
 # loc_seq <- TraMineR::seqdef(test,id='auto')
 
 
+################################################################
+################################################################
+############ Manual location updates
+############
+################################################################
+################################################################
+
+bmc_rec_df
+
 
 ################################################################
 ################################################################
@@ -298,3 +358,77 @@ for (t in tables) {
     print(res)
   }
 }
+
+
+################################################################
+################################################################
+############ Scipts for pulling all old sqlite data into PG db
+############
+################################################################
+################################################################
+
+
+# Get sqlite connection
+sqlite_con <- get_sqlite_con(
+  db_loc = config$db_loc,
+  db_name = config$db_name
+)
+# Get pg con
+pg_con <- get_connection(
+  db_name = paste0('rtls_','jhh'),
+  db_u = config$db_u,
+  db_pw = config$db_pw)
+
+sqlt_tbls <- DBI::dbListTables(sqlite_con)
+
+for (t in sqlt_tbls){
+  print(t)
+  if(!(grepl("RTLS",t))){
+    # read data from table... set column names to lowercase
+    badge_data <- sqlite_con %>%
+      tbl(t) %>%
+      collect() %>%
+      rename_all(tolower) %>%
+      mutate(across(c('time_in','time_out'), lubridate::ymd_hms))
+    print(nrow(badge_data))
+    badgeNum <- stringr::str_split(t,'_')[[1]][2]
+    pgTable <- paste0('table_',badgeNum)
+    if (pg_con %>% DBI::dbExistsTable(conn = pg_con, name = pgTable)) {
+      DBI::dbAppendTable(conn = pg_con, name = pgTable, 
+                        value = badge_data, overwrite=FALSE, append = TRUE)
+    } else {
+      # create table
+      DBI::dbWriteTable(conn = pg_con, name = pgTable, 
+                        value = badge_data)
+    }
+    }
+  }
+
+######### Figure for understanding wierd bayveiw data
+# data_for_fb_df_jhh %>%
+test2 %>%
+  mutate(date = date(time_in)) %>%
+  dplyr::select(date,badge,duration) %>%
+  # filter(duration < 1440) %>%
+  group_by(date, badge) %>%
+  summarize(
+    tot_duration = sum(duration, na.rm = TRUE),
+    n_hits = n()) %>%
+  ungroup() %>%
+  ggplot(aes(x = n_hits, y = tot_duration)) + geom_point() + facet_wrap(~badge)
+
+data_for_fb_df_jhh %>%
+  mutate(date = date(time_in)) %>%
+  filter(date == as.Date('2022-05-29')) %>%
+  filter(badge == 524772) %>%
+  summarize(tot_duration = sum(duration))
+
+data_for_fb_df_jhh %>%
+  mutate(date = date(time_in)) %>%
+  group_by(date, badge) %>%
+  summarize(tot_duration = sum(duration)) %>%
+  filter(tot_duration >= 1440)
+
+
+
+

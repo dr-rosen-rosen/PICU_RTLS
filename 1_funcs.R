@@ -79,6 +79,7 @@ migrate_location_codes <- function(pg_con, sqlite_con){
   #DBI::dbDisconnect(sqlite_con)
   NULL
 }
+
 ###############################################################################################
 #####################   Pulls data for specific badges and time range
 ###############################################################################################
@@ -117,34 +118,86 @@ get_RTLS_data <- function(badges, strt, stp, con) {
   return(all_data)
 }
 
+split_days <- function(row) {
+  # new_time_out <- lubridate::date(row$time_in[[1]])
+  # print(row)
+  row <- as.data.frame(row)
+  day_one <- list(
+    'receiver' = row$receiver,#[[1]],
+    "time_in" = row$time_in,
+    "time_out" = NA,#row$time_out,#new_time_out,
+    "badge" = row$badge,
+    "receiver_recode" = row$receiver_recode,
+    "receiver_name" = row$receiver_name,
+    "duration" = NA #row$duration
+  )
+  day_two <- list(
+    'receiver' = row$receiver,#[[1]],
+    "time_in" = NA, #row$time_in,
+    "time_out" = row$time_out,#new_time_out,
+    "badge" = row$badge,
+    "receiver_recode" = row$receiver_recode,
+    "receiver_name" = row$receiver_name,
+    "duration" = NA #row$duration
+  )
+  return(dplyr::bind_rows(list(day_one,day_two)))
+}
+
+locCodeBadges <- function(badge_data,db_u,db_pw,site) {
+  # get receiver data
+  con <- get_connection(
+    db_name = paste0('rtls_',site),
+    db_u = config$db_u,
+    db_pw = config$db_pw)
+  receivers <- con %>%
+    tbl('rtls_receivers') %>%
+    collect() %>%
+    rename(receiver_recode = location_code)
+  badge_data <- badge_data %>%
+    left_join(receivers, by = 'receiver')
+  return(badge_data)
+}
+
+getActiveBadges <- function(badge_file){
+  b <- readxl::read_excel(badge_file) %>%
+    filter(Active == 'Yes') 
+  return(unique(b$RTLS_ID))
+}
 
 get_and_locCode_RTLS_data_pg <- function(badges, strt, stp, sites, use_rules) {
-  # set up empty dataframe to store
+  
   print("Pulling RTLS data...")
-  all_data <- data.frame(
-    receiver = integer(),
-    time_in = .POSIXct(character()),
-    time_out = .POSIXct(character()),
-    badge = character(),
-    receiver_recode = character(),
-    receiver_name = character(),
-    duration = numeric()
-  )
+  all_data <- data.frame()
   for (site in sites){
+    print(paste0("...for ",site,":"))
+    # set up empty dataframe to store site results
+    site_data <- data.frame(
+      receiver = integer(),
+      time_in = .POSIXct(character()),
+      time_out = .POSIXct(character()),
+      badge = character(),
+      receiver_recode = character(),
+      receiver_name = character(),
+      duration = numeric()
+    )
+
     con <- get_connection(
       db_name = paste0('rtls_',site),
       db_u = config$db_u,
       db_pw = config$db_pw)
+
     # makes sure badges is a list (and not just one badge var)
-    if (length(badges) > 1){ badges <- paste0('table_',badges)}
+    if (length(badges) > 1){ site_badges <- paste0('table_',badges)}
     else if (length(badges) == 1) {
       if (badges == 'all') {
         tbls <- DBI::dbListTables(con)
-        badges <- grep('table_',tbls, value = TRUE)
-    } else {badges <- as.list(paste0('table_',badges))}
+        site_badges <- grep('table_',tbls, value = TRUE)
+    } else {site_badges <- as.list(paste0('table_',badges))}
     }
+
     # loops through each badge and returns data in timerange
-    for (badge in badges) {
+    for (badge in site_badges) {
+      print(badge)
       if (DBI::dbExistsTable(conn = con, name = badge)) {
         # Read in data and filter by time
         badge_data <- con %>%
@@ -152,34 +205,32 @@ get_and_locCode_RTLS_data_pg <- function(badges, strt, stp, sites, use_rules) {
           collect() %>%
           mutate(across(c('time_in','time_out'), lubridate::ymd_hms)) %>%
           filter(time_in > strt & time_in < stp) # start and stop times are non-inclusive
-
-        badge_data$badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
-        ### Add location coding
-        # badge_data <- loc_code_badge_data_pg(
-        #   badge_data = badge_data,
-        #   db_u = config$db_u,
-        #   db_pw = config$db_pw,
-        #   site = site)
-        all_data <- rbind(all_data, badge_data)
+        if (!plyr::empty(df)) {
+          badge_data$badge <- as.integer(stringr::str_split(badge, '_')[[1]][2])
+          site_data <- rbind(site_data, badge_data)
+        } else {print(paste('No data in range for',badge,'...'))}
       } else {print(paste('No Table for ',badge,' ...'))}
     } # End iterating through badges
-    all_data <- loc_code_badge_data_pg(
-      badge_data = all_data,
+    # location code all data
+    print('Here 1')
+    site_data <- locCodeBadges(
+      badge_data = site_data,
       db_u = config$db_u,
       db_pw = config$db_pw,
-      site = site)
+      site = site) %>%
+      mutate(site = site)
+    print('Here 2')
+    if (dim(all_data)[1] == 0) 
+      { all_data <- data.frame(site_data)} # creates copy
+    else { all_data <- dplyr::bind_rows(all_data,site_data)} # appends site data together
+    
   } # End site looping
-  # if (use_rules == TRUE) {
-  #   all_data <- apply_rules(
-  #     df = all_data,
-  #     rule_1_thresh = config$rule_1_thresh,
-  #     rule_2_thresh = config$rule_2_thresh,
-  #     rule_2_locs = config$rule_2_locs
-  #   )
-  # } # applies locatio screening rules.
+  print('Here 3')
+  all_data$duration <- as.numeric(difftime(all_data$time_out,all_data$time_in,units = 'mins'))
+  # applies locatio screening rules.
+  #
   return(all_data)
 }
-
 
 # pulls all reciever location data... used for manual review and update
 get_receiver_loc_data <- function(con, t_name) {
@@ -202,6 +253,7 @@ manual_receiver_update <- function(df, con) {
   }
   NULL
 }
+
 ###############################################################################################
 #####################   Creates a bar charts
 ###############################################################################################
@@ -301,55 +353,65 @@ make_area_plot <- function(df, perc, badge) {
 
 ### Creates one feedback report
 
-create_FB_reports <- function(df, FB_report_dir, save_badge_timeline) {
-
-  df <- df %>%
-    group_by(badge) %>%
-    filter(sum(duration) > (config$min_hours_for_fb * 60)) %>%
-    ungroup()
-
-  # make reports
-  for (badge in unique(df$badge)){
-    overall_bar <- make_overall_bar(df = df, badge_num = badge)
-    ind_area_norm <- make_area_plot(
-      df = make_timeseries_df_for_dummies(df = df[which(df$badge == badge), ]),#,f = 'S'),
-      perc = TRUE, #if true, will create porportional chart ,if false will do raw
-      badge = badge # if NULL this assumes a summary plot; if an int it will use that in plot titles
-    )
-    ind_area_raw <- make_area_plot(
-      df = make_timeseries_df_for_dummies(df = df[which(df$badge == badge), ]),#,f = 'S'),
-      perc = FALSE, #if true, will create porportional chart ,if false will do raw
-      badge = badge # if NULL this assumes a summary plot; if an int it will use that in plot titles
-    )
-    tot_hours <-sum(df[which(df$badge == badge),'duration']) / 60
-    tot_hours <- round(tot_hours,digits = 1)
-    area_plots <- ind_area_raw / ind_area_norm + plot_layout(guides = 'collect') & theme(legend.position='bottom')
-    report <- officer::read_docx(path = config$FB_report_template) %>%
-      body_add_par("Time in Location Data Report", style = "Title") %>%
-      body_add_par(paste("Badge:",toString(badge)), style = 'Normal') %>%
-      body_add_par(paste("From:",lubridate::date(min(df$time_in)),"to",lubridate::date(max(df$time_out))), style = 'Normal') %>%
-      body_add_par(paste("Total hours in this report:",toString(tot_hours)), style = 'Normal') %>%
-      body_add_par('') %>%
-      body_add_par(config$FB_intro_para) %>%
-      body_add_par('') %>%
-      body_add_par("Where does the data come from?", style = 'Subtitle') %>%
-      body_add_par(config$FB_where_para, style = 'Normal') %>%
-      body_add_par('') %>%
-      body_add_par('What am I supposed to do with this data?', style = 'Subtitle') %>%
-      body_add_par(config$FB_what_para, style = 'Normal') %>%
-      body_add_break(pos = "after") %>%
-      body_add_par("Where you spend your time compared to your peers", style = 'Subtitle') %>%
-      body_add_par('') %>%
-      body_add_gg(overall_bar) %>%
-      body_add_break(pos = "after") %>%
-      body_add_par("Where you spend your time throughout the day", style = 'Subtitle') %>%
-      body_add_par('') %>%
-      body_add_gg(area_plots) %>%
-      print(target = file.path(getwd(),FB_report_dir,paste0(toString(badge),'.docx')))
-    if (save_badge_timeline == TRUE) {
-      write.csv(df[which(df$badge == badge), ],file.path(getwd(),FB_report_dir,paste0(toString(badge),'_timeline.csv')))
+create_FB_reports <- function(df, FB_report_dir, save_badge_timeline, min_hours_for_fb) {
+  # Notes: this currently does not account for small amounts of time a resident may spend at more than
+  # one site per day
+  print(nrow(df))
+  sites <- unique(df$site)
+  for (s in sites) {
+    print(s)
+    df_site <- df %>%
+      dplyr::filter(site == s) %>%
+      dplyr::select(c(-site))
+    print(nrow(df_site))
+    df_site <- df_site %>%
+      group_by(badge) %>%
+      dplyr::filter(sum(duration) > (min_hours_for_fb * 60)) %>%
+      ungroup()
+    print(nrow(df_site))
+    # make reports
+    for (badge in unique(df_site$badge)){
+      overall_bar <- make_overall_bar(df = df_site, badge_num = badge)
+      ind_area_norm <- make_area_plot(
+        df = make_timeseries_df_for_dummies(df = df_site[which(df_site$badge == badge), ]),#,f = 'S'),
+        perc = TRUE, #if true, will create porportional chart ,if false will do raw
+        badge = badge # if NULL this assumes a summary plot; if an int it will use that in plot titles
+      )
+      ind_area_raw <- make_area_plot(
+        df = make_timeseries_df_for_dummies(df = df_site[which(df_site$badge == badge), ]),#,f = 'S'),
+        perc = FALSE, #if true, will create porportional chart ,if false will do raw
+        badge = badge # if NULL this assumes a summary plot; if an int it will use that in plot titles
+      )
+      tot_hours <-sum(df_site[which(df_site$badge == badge),'duration']) / 60
+      tot_hours <- round(tot_hours,digits = 1)
+      area_plots <- ind_area_raw / ind_area_norm + plot_layout(guides = 'collect') & theme(legend.position='bottom')
+      report <- officer::read_docx(path = config$FB_report_template) %>%
+        body_add_par("Time in Location Data Report", style = "Title") %>%
+        body_add_par(paste("Badge:",toString(badge)), style = 'Normal') %>%
+        body_add_par(paste("From:",lubridate::date(min(df_site$time_in)),"to",lubridate::date(max(df_site$time_out))), style = 'Normal') %>%
+        body_add_par(paste("Total hours in this report:",toString(tot_hours)), style = 'Normal') %>%
+        body_add_par('') %>%
+        body_add_par(config$FB_intro_para) %>%
+        body_add_par('') %>%
+        body_add_par("Where does the data come from?", style = 'Subtitle') %>%
+        body_add_par(config$FB_where_para, style = 'Normal') %>%
+        body_add_par('') %>%
+        body_add_par('What am I supposed to do with this data?', style = 'Subtitle') %>%
+        body_add_par(config$FB_what_para, style = 'Normal') %>%
+        body_add_break(pos = "after") %>%
+        body_add_par("Where you spend your time compared to your peers", style = 'Subtitle') %>%
+        body_add_par('') %>%
+        body_add_gg(overall_bar) %>%
+        body_add_break(pos = "after") %>%
+        body_add_par("Where you spend your time throughout the day", style = 'Subtitle') %>%
+        body_add_par('') %>%
+        body_add_gg(area_plots) %>%
+        print(target = here(getwd(),FB_report_dir,s,paste0(toString(badge),'.docx')))
+      if (save_badge_timeline == TRUE) {
+        write.csv(df_site[which(df_site$badge == badge), ],here(getwd(),FB_report_dir,s,paste0(toString(badge),'_timeline.csv')))
+      }
     }
-  }
+  } # end looping through sites
 }
 
 ###############################################################################################
@@ -434,7 +496,7 @@ get_files_from_outlk <- function(outlk_sess, n) {
       f <- paste0('rtls_',site,'_',lubridate::date(em$properties$sentDateTime),kind)
       em$list_attachments()[[1]]$download(dest = here('Data/RTLS_Data/tmp',f),overwrite = TRUE)
       # move email to archive folder
-      em$move(dest = outlk_sess$get_folder('RTLS_archive'))
+      em$move(dest = folder$get_folder('RTLS_archive'))
     }
   }
   NULL

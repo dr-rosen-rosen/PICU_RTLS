@@ -171,18 +171,18 @@ def get_weekly_report_pg(anchor_date,look_back_days,db_u,db_pw,target_badges,wee
     for site in sites:
         # make connection and get data
         df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
-        engine = create_engine(df_string)
-        metadata = MetaData(bind=engine)
+        engine = sa.create_engine(df_string)
+        metadata = sa.MetaData(bind=engine)
         metadata.reflect()
         connection = engine.connect()
         connection.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-        insp = inspect(engine)
+        insp = sa.inspect(engine)
 
         for t in target_badges:#tables:
             print(t)
             if insp.has_table(str('table_'+str(t))):
                 tbl = metadata.tables[str('table_'+str(t))]
-                s = select([tbl]).where(and_(tbl.c.time_in >= lft_win,tbl.c.time_in <= rght_win))
+                s = sa.select([tbl]).where(sa.and_(tbl.c.time_in >= lft_win,tbl.c.time_in <= rght_win))
                 #s = select([RTLS_data]).where(RTLS_data.c.time_in >= start)
                 rp = connection.execute(s)
                 df = pd.DataFrame(rp.fetchall())
@@ -217,7 +217,7 @@ def get_weekly_report_pg(anchor_date,look_back_days,db_u,db_pw,target_badges,wee
 # 0. Make table names and var names lower case with _
 
 def csv_to_db_pg(tmp_csv_path, archive_csv_path,db_u, db_pw):
-    sites = ['jhh','bmc']
+    sites = ['bmc']#['jhh','bmc']
     for site in sites:
         # Creates connection to db and loads appropriate scripts
         df_string = 'postgresql://'+db_u+':'+db_pw+'@localhost:5433/rtls_'+site # Format for ps string: dialect+driver://username:password@host:port/database
@@ -261,9 +261,9 @@ def csv_to_db_pg(tmp_csv_path, archive_csv_path,db_u, db_pw):
                 metadata = sa.MetaData(engine)
                 # Create a table with the appropriate Columns
                 RTLS_Data = sa.Table(Table_name, metadata,
-                    Column('receiver',Integer, nullable=False),
-                    Column('time_in',DateTime()),
-                    Column('time_out',DateTime()))
+                    sa.Column('receiver',sa.Integer, nullable=False),
+                    sa.Column('time_in',sa.DateTime),
+                    sa.Column('time_out',sa.DateTime))
                 metadata.create_all()
             else:
                 metadata = sa.MetaData(bind=engine)
