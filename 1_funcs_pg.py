@@ -5,10 +5,6 @@
 ####################################################################################################
 ####################################################################################################
 
-# from sqlalchemy import (UniqueConstraint,MetaData,Table,Column,Integer,Numeric,Float,Boolean,String,DateTime,ForeignKey,create_engine,select,update,delete,insert,and_,inspect)
-# from sqlalchemy_utils.functions import create_database
-# from sqlalchemy import inspect
-# from sqlalchemy import func
 import sqlalchemy as sa
 import os
 from datetime import datetime

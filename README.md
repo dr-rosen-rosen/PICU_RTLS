@@ -1,2 +1,2 @@
 # GEL_RTLS
-Analysis of location tracking for AMA GEL project
+Analysis of location tracking for PICU CAL project
