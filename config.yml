@@ -2,33 +2,15 @@ default:
     py_version: "python3/bin/python"
     rcvr_recode_file: '/Users/mrosen44/OneDrive - Johns Hopkins University/Data_Analysis/IM_Resident_Study/Receiver_codes/Revised_reciever_category_2.xlsx'
     rcvr_recode_file_loc: '/Data/'
-    db_loc: '/Users/mrosen44/Documents/Data_Analysis_Local/RTLS_FB_Reports/'
-    db_name: 'RTLS_06102021.db'
+    # db_loc: '/Users/mrosen44/Documents/Data_Analysis_Local/RTLS_FB_Reports/'
+    db_name: 'rtls_picu'
     db_u: 'postgres'
     db_pw: 'ZNVMDBPld1Mn'
-    tmp_csv_path: '/Users/mrosen44/Documents/Data_Analysis_Local/GEL_RTLS/Data/RTLS_Data/tmp'
-    archive_csv_path: '/Users/mrosen44/Documents/Data_Analysis_Local/GEL_RTLS/Data/RTLS_Data/archive'
+    # tmp_csv_path: '/Users/mrosen44/Documents/Data_Analysis_Local/GEL_RTLS/Data/RTLS_Data/tmp'
+    # archive_csv_path: '/Users/mrosen44/Documents/Data_Analysis_Local/GEL_RTLS/Data/RTLS_Data/archive'
     in_path: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/Data_pulls'
     rule_1_thresh: 300
     rule_2_thresh: 180
     rule_2_locs: !expr list('MD Workroom')
     badge_file: '/Users/mrosen44/Johns Hopkins University/Amanda Bertram - Graduate Medical Training Laboratory/RTLS Badge Status.xlsx'
-    weekly_report_dir: '/Users/mrosen44/Documents/Data_Analysis_Local/GEL_RTLS/Output/WeeklyReportDocs/'
-    FB_report_dir: '/Output/FeedbackReportDocs/'
-    FB_report_template: 'Output/Templates/FB_report_template.docx'
-    FB_report_start: !expr as.POSIXct("2022-01-13") #lubridate::ymd_hms("2019-07-28 00:00:00")
-    FB_report_stop: !expr as.POSIXct("2022-03-09") #lubridate::ymd_hms("2019-08-28 00:00:00")
     badge_timeline_dir: !expr getwd()
-    weekly_report_range: 7 # days to look back for reports
-    min_hours_for_fb: 80
-    FB_intro_para: 'Thank you for participating in the Graduate Education Lab (GEL) program to reimagine residency. A large part of improving the educational experience involves understanding the current state of where and how you spend your time. To that end, Figure 1 below depicts where you’ve spent your time in different physical locations compared to your peers. Figure 2 depicts where you spend your time through the course of a day.'
-    FB_where_para: 'The data in this report come from the RTLS badge you have been wearing. Each badge is detected by sensors installed throughout the hospital, which register your specific location at any point in time. All location detecting receivers have been classified into one of eight categories: Patient Rooms, MD Workrooms, Ward Halls, Education (e.g., lecture halls, conference rooms), Supply and Admin (e.g., medical supply, nutrition, offices), Transit (e.g., stairwells, elevators, concourses), Other (e.g., unknown locations), and Family Spaces.'
-    FB_what_para: 'This information is intended as a means of self-reflection. No specific action is required.'
-
-pilot_study:
-    db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/Data_Analysis/IM_Resident_Study/Data_bases/'
-    db_name: 'IM_Resident_RTLS_PILOT.db'
-
-pilot_study_RTLS_030819_db:
-    db_loc: '/Users/mrosen44/OneDrive - Johns Hopkins University/RTLS_Data/'
-    db_name: 'RTLS_030819.db'

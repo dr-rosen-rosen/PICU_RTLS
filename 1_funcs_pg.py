@@ -22,44 +22,44 @@ import shutil
 ####################################################################################################
 
 #Pulls specific range of data from RTLS table, de-duplicates if needed
-def pullRTLS(rng,RTLS_data,connection,select,datetime,timedelta,and_,pd):
-    # set date range to pull from DB
-    if rng == 'weekly_report':
-        days_to_subtract = 7
-        end = datetime.date(datetime.now()) - timedelta(days=1)
-        start = end - timedelta(days=days_to_subtract)
-    elif rng == 'pilot':
-        end = pd.to_datetime('2019-6-30')
-        start = pd.to_datetime('2018-7-1')
-    elif rng == 'all_ama':
-        end = pd.to_datetime(datetime.now())
-        start = pd.to_datetime('2019-7-1')
-    else: print('no time range set, no data pulled')
-    # Pull RLTS hits in time range
-    print(end)
-    print(start)
-    s = select([RTLS_data]).where(and_(RTLS_data.c.time_in >= start,RTLS_data.c.time_in <= end))
-    #s = select([RTLS_data]).where(RTLS_data.c.time_in >= start)
-    rp = connection.execute(s)
-    df = pd.DataFrame(rp.fetchall())
-    print(len(df))
-    df.columns = rp.keys()
-    # Tests for any duplicates (there shouldn't be any); returns deduplicated if there are duplicates
-    if len(df) == len(df.drop_duplicates(subset=None, keep='first', inplace=False)):
-        print('no dupes in hits pulled!!!... '+str(len(df)))
-        return df
-    else:
-        print('Got some dupes!!!... '+str(len(df) - len(df.drop_duplicates(subset=None, keep='first', inplace=False))))
-        return df.drop_duplicates(subset=None, keep='first', inplace=False)
+# def pullRTLS(rng,RTLS_data,connection,select,datetime,timedelta,and_,pd):
+#     # set date range to pull from DB
+#     if rng == 'weekly_report':
+#         days_to_subtract = 7
+#         end = datetime.date(datetime.now()) - timedelta(days=1)
+#         start = end - timedelta(days=days_to_subtract)
+#     elif rng == 'pilot':
+#         end = pd.to_datetime('2019-6-30')
+#         start = pd.to_datetime('2018-7-1')
+#     elif rng == 'all_ama':
+#         end = pd.to_datetime(datetime.now())
+#         start = pd.to_datetime('2019-7-1')
+#     else: print('no time range set, no data pulled')
+#     # Pull RLTS hits in time range
+#     print(end)
+#     print(start)
+#     s = select([RTLS_data]).where(and_(RTLS_data.c.time_in >= start,RTLS_data.c.time_in <= end))
+#     #s = select([RTLS_data]).where(RTLS_data.c.time_in >= start)
+#     rp = connection.execute(s)
+#     df = pd.DataFrame(rp.fetchall())
+#     print(len(df))
+#     df.columns = rp.keys()
+#     # Tests for any duplicates (there shouldn't be any); returns deduplicated if there are duplicates
+#     if len(df) == len(df.drop_duplicates(subset=None, keep='first', inplace=False)):
+#         print('no dupes in hits pulled!!!... '+str(len(df)))
+#         return df
+#     else:
+#         print('Got some dupes!!!... '+str(len(df) - len(df.drop_duplicates(subset=None, keep='first', inplace=False))))
+#         return df.drop_duplicates(subset=None, keep='first', inplace=False)
 
 #Pulls all recievers from table
-def pullReceivers(RTLS_Receivers,connection):
-    s = sa.select([RTLS_Receivers])
-    rp = connection.execute(s)
-    receivers = pd.DataFrame(rp.fetchall())
-    receivers.columns = rp.keys()
-    print('this many receivers... '+str(len(receivers)))
-    return receivers
+# def pullReceivers(RTLS_Receivers,connection):
+#     s = sa.select([RTLS_Receivers])
+#     rp = connection.execute(s)
+#     receivers = pd.DataFrame(rp.fetchall())
+#     receivers.columns = rp.keys()
+#     print('this many receivers... '+str(len(receivers)))
+#     return receivers
 
 # Inserts new recievers into the receivers table
 def updateRTLSReceivers(receivers,RTLS_Receivers,connection):
@@ -212,7 +212,7 @@ def get_weekly_report_pg(anchor_date,look_back_days,db_u,db_pw,target_badges,wee
 # 3. give it all a shot!!!
 # 0. Make table names and var names lower case with _
 
-def csv_to_db_pg(tmp_csv_path, archive_csv_path,db_u, db_pw):
+def csv_to_db_pg(tmp_csv_path, db_u, db_pw):
     sites = ['bmc']#['jhh','bmc']
     for site in sites:
         # Creates connection to db and loads appropriate scripts
@@ -268,8 +268,9 @@ def csv_to_db_pg(tmp_csv_path, archive_csv_path,db_u, db_pw):
             badge_hits = hits[hits.RTLS_ID ==  badge].copy().drop('RTLS_ID',axis=1) # Send just the data for that badge
             storeRTLS(badge_hits,RTLS_Data,connection)
     # Move all files from the tmp to archive directories
-    for src_file in os.listdir(tmp_csv_path):
-        shutil.move(os.path.join(tmp_csv_path,src_file), os.path.join(archive_csv_path,src_file))
+    # for src_file in os.listdir(tmp_csv_path):
+    #     shutil.move(os.path.join(tmp_csv_path,src_file), os.path.join(archive_csv_path,src_file))
+        
 ####################################################################################################
 ############################## Looks at all recievers in db, and adds location code for those with none
 ####################################################################################################

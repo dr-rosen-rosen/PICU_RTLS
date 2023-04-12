@@ -15,8 +15,8 @@ debuggingState(on=FALSE)
 # start ve with: source python3/bin/activate in project folder
 Sys.setenv(R_CONFIG_ACTIVE = 'default')#"pilot_study_RTLS_030819_db") # 
 config <- config::get()
-Sys.setenv(RETICULATE_PYTHON = config$py_version)
-reticulate::source_python('1_funcs_pg.py')
+# Sys.setenv(RETICULATE_PYTHON = config$py_version)
+# reticulate::source_python('1_funcs_pg.py')
 source(here('1_funcs.R'), echo = TRUE)
 
 ######### Automated data flow from email to postgres

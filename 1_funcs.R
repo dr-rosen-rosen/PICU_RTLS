@@ -28,7 +28,59 @@ get_connection <- function(db_name, db_u, db_pw){
     return(con)
 }
 
+csv_to_db <- function(top_folder,con) {
+  # get list of all of the file names to read in
+  f_names <- list.files(top_folder, 
+                        pattern = "RTLS",
+                        full.names = TRUE, 
+                        recursive = TRUE
+                        )
+  datalist = vector("list", length = length(f_names))
+  for (i in 1:length(f_names)) {
+    # print(f_names[[i]])
+    datalist[[i]] <- read.csv(f_names[[i]]) %>% janitor::clean_names()
+    # print(nrow(datalist[[i]]))
+  }
+  df <- do.call(rbind,datalist)
+  rec_df <- df %>%
+    select(receiver,receiver_name,receiver_recode) %>%
+    distinct()
+  if(!DBI::dbExistsTable(conn = con, name = 'rtls_receivers')) {
+    DBI::dbCreateTable(con, 'rtls_receivers',rec_df)
+  }
+  DBI::dbWriteTable(con, name = 'rtls_receivers', value = rec_df, append = TRUE)
+  
+  df %>%
+    select(receiver,time_in,time_out,rtls_id)
+  print(nrow(df))
+  badges <- unique(df$rtls_id)
+  print(badges)
+  for (badge in badges) {
+    # check if table exists for given badge.
+    badge_df <- df %>%
+      filter(rtls_id == badge) %>%
+      select(receiver,time_in,time_out)
+    print(badge)
+    print(nrow(badge_df))
+    t <- paste0('table_',badge)
+    if (!DBI::dbExistsTable(conn = con, name = t)) {
+      DBI::dbCreateTable(con,t,badge_df) # create new table if it does not exist
+    }
+    DBI::dbWriteTable(con, name = t, value = badge_df, append = TRUE) # write data
+  }
+}
 
+
+top_folder <- '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection'
+csv_to_db(top_folder,
+          con = get_connection(
+            db_name = config$db_name, 
+            db_u = config$db_u, 
+            db_pw = config$db_pw
+          ))
+
+df <- read.csv("/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection/Shift_89/RTLS_data/Shift_89_RTLS.csv") %>%
+  janitor::clean_names()
 
 ###############################################################################################
 #####################   Pulls data for specific badges and time range
@@ -156,20 +208,20 @@ get_and_locCode_RTLS_data_pg <- function(badges, strt, stp, sites, use_rules) {
       } else {print(paste('No Table for ',badge,' ...'))}
     } # End iterating through badges
     # location code all data
-    print('Here 1')
+    # print('Here 1')
     site_data <- locCodeBadges(
       badge_data = site_data,
       db_u = config$db_u,
       db_pw = config$db_pw,
       site = site) %>%
       mutate(site = site)
-    print('Here 2')
+    # print('Here 2')
     if (dim(all_data)[1] == 0) 
       { all_data <- data.frame(site_data)} # creates copy
     else { all_data <- dplyr::bind_rows(all_data,site_data)} # appends site data together
     
   } # End site looping
-  print('Here 3')
+  # print('Here 3')
   all_data$duration <- as.numeric(difftime(all_data$time_out,all_data$time_in,units = 'mins'))
   # applies locatio screening rules.
   #
