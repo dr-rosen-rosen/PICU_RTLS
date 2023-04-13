@@ -19,6 +19,36 @@ config <- config::get()
 # reticulate::source_python('1_funcs_pg.py')
 source(here('1_funcs.R'), echo = TRUE)
 
+# read rtls into db
+# top_folder <- '/Users/mrosen44/Johns Hopkins/Salar Khaleghzadegan - Project_CollectiveAllostaticLoad/PICU Data Collection'
+csv_to_db(top_folder,
+          con = get_connection(
+            db_name = config$db_name,
+            db_u = config$db_u,
+            db_pw = config$db_pw
+          ))
+
+tasks_df <- get_task_lists(
+  data_dir = 'data',
+  fname = 'PICU_Device_Assignment.xlsx'
+)
+
+# x <- get_rtls_metrics(tasks_df[which(tasks_df$shift_day == 'Shift_97'),])
+x <- get_rtls_metrics(tasks_df)
+hist(x$entropy)
+hist(log(x$fano_factor))
+hist(log(x$prop_time_in_pt_rm))
+hist(log(x$min_in_pt_rm))
+scatterplot3d::scatterplot3d(x$entropy,x$fano_factor,log(x$min_in_pt_rm))
+
+
+# 
+# t <- ymd_hms('2020-10-16 07:12:24')
+# t <- lubridate::floor_date(t,unit = 'hours')
+
+
+
+
 ######### Automated data flow from email to postgres
 #########
 
